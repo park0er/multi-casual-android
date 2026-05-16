@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -5068,17 +5069,19 @@ private fun IssueMaterialListRow(
                     modifier = Modifier.widthIn(min = 44.dp, max = 54.dp),
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        text = issue.title,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp,
-                            lineHeight = 19.sp,
-                        ),
-                        color = MulticaColors.Text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = issue.title,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 19.sp,
+                            ),
+                            color = MulticaColors.Text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     val rowMetadata = listOf(
                         Models.priorityLabel(issue.priority, zh),
                         metadata,
@@ -7607,17 +7610,19 @@ private fun IssueDetailHeroCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = issue.title,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            lineHeight = 27.sp,
-                        ),
-                        color = MulticaColors.Text,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = issue.title,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                lineHeight = 27.sp,
+                            ),
+                            color = MulticaColors.Text,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 MulticaIconPillButton(
                     icon = Icons.Outlined.ContentCopy,
@@ -8104,6 +8109,7 @@ private fun IssueTimelineWebDenseRow(
     title: String,
     subtitle: String,
     kind: String,
+    zh: Boolean,
     highlighted: Boolean,
     showDivider: Boolean = false,
     contentDescription: String? = null,
@@ -8153,7 +8159,7 @@ private fun IssueTimelineWebDenseRow(
                     )
                     if (highlighted) {
                         Text(
-                            text = "PINNED",
+                            text = if (zh) "置顶" else "Pinned",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 13.sp),
                             color = MulticaColors.Accent,
                             maxLines = 1,
@@ -10139,7 +10145,7 @@ private fun PilotIssueDetail(
                         items(data.runs) { run ->
                             IssueDetailWebActionRow(
                                 eyebrow = shortDate(run.startedAt),
-                                title = "Agent run · ${run.status}",
+                                title = agentRunTitle(run.status, zh),
                                 subtitle = clean(run.error).ifBlank { null },
                                 icon = Icons.Outlined.Bolt,
                                 tone = if (run.status == "failed") MulticaButtonTone.Destructive else MulticaButtonTone.Ghost,
@@ -10294,6 +10300,7 @@ private fun PilotIssueDetail(
                                 title = if (zh) "时间线暂不可用" else "Timeline unavailable",
                                 subtitle = if (zh) "稍后重试或查看网页版" else "Try again later or check the web app",
                                 kind = if (zh) "状态" else "Status",
+                                zh = zh,
                                 highlighted = false,
                             )
                         } else if (entries.isEmpty()) {
@@ -10301,6 +10308,7 @@ private fun PilotIssueDetail(
                                 title = if (zh) "暂无时间线记录" else "No timeline events",
                                 subtitle = if (zh) "评论和活动会显示在这里" else "Comments and activity will appear here",
                                 kind = if (zh) "空" else "Empty",
+                                zh = zh,
                                 highlighted = false,
                             )
                         } else {
@@ -10328,6 +10336,7 @@ private fun PilotIssueDetail(
                                     } else {
                                         if (zh) "活动" else "Activity"
                                     },
+                                    zh = zh,
                                     highlighted = highlighted,
                                     showDivider = index < visibleTimelineEntries.lastIndex || timelineHasMoreBefore,
                                 )
@@ -10341,6 +10350,7 @@ private fun PilotIssueDetail(
                                     },
                                     subtitle = if (zh) "继续读取更早的活动记录" else "Fetch older activity entries",
                                     kind = if (zh) "更多" else "More",
+                                    zh = zh,
                                     highlighted = false,
                                     contentDescription = "Issue Timeline Load Older",
                                     onClick = { loadOlderTimeline() },
@@ -10995,13 +11005,15 @@ private fun PilotAgentTranscript(
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "Agent run · ${run.status}",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MulticaColors.Text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = agentRunTitle(run.status, zh),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MulticaColors.Text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = listOf(shortDate(run.startedAt), clean(run.error))
                                 .filter { it.isNotBlank() }
@@ -11234,6 +11246,11 @@ private fun transcriptTypeIcon(type: String): ImageVector {
     }
 }
 
+private fun agentRunTitle(status: String, zh: Boolean): String {
+    val value = clean(status).ifBlank { if (zh) "未知状态" else "unknown" }
+    return if (zh) "Agent 运行 · $value" else "Agent run · $value"
+}
+
 @Composable
 private fun PilotAgentTranscriptPreview() {
     val WEB_SSOT_AGENT_TRANSCRIPT_DIALOG = "/Users/park0er/coding/multica-web-source/packages/views/common/task-transcript/agent-transcript-dialog.tsx"
@@ -11332,23 +11349,29 @@ private fun MarkdownBlock(markdown: String) {
     val textColor = MulticaColors.Text.toArgb()
     val mutedColor = MulticaColors.Muted.toArgb()
     val borderColor = MulticaColors.Border.toArgb()
-    AndroidView(
-        modifier = Modifier.fillMaxWidth(),
-        factory = { context ->
-            LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        },
-        update = { view ->
-            view.removeAllViews()
-            MarkdownRenderer.render(
-                view.context,
-                view,
-                markdown,
-                textColor,
-                mutedColor,
-                borderColor,
-            )
-        },
-    )
+    SelectionContainer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "Selectable Markdown Block" },
+    ) {
+        AndroidView(
+            modifier = Modifier.fillMaxWidth(),
+            factory = { context ->
+                LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+            },
+            update = { view ->
+                view.removeAllViews()
+                MarkdownRenderer.render(
+                    view.context,
+                    view,
+                    markdown,
+                    textColor,
+                    mutedColor,
+                    borderColor,
+                )
+            },
+        )
+    }
 }
 
 @Composable
@@ -11591,12 +11614,14 @@ private fun PilotProjectDetail(
                             },
                             contentDescription = "Project Detail Web Description",
                         ) {
-                            Text(
-                                text = preview(data.project.description)
-                                    ?: if (zh) "暂无项目描述" else "No project description",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
-                                color = if (data.project.description.isBlank()) MulticaColors.Muted else MulticaColors.Text,
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = preview(data.project.description)
+                                        ?: if (zh) "暂无项目描述" else "No project description",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                                    color = if (data.project.description.isBlank()) MulticaColors.Muted else MulticaColors.Text,
+                                )
+                            }
                         }
                     }
                     if (!pinResult.isNullOrBlank()) {
@@ -11823,18 +11848,19 @@ private fun ProjectDetailWebHero(
                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            project.name,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 20.sp,
-                                lineHeight = 25.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            ),
-                            color = MulticaColors.Text,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        SelectionContainer(modifier = Modifier.weight(1f)) {
+                            Text(
+                                project.name,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 20.sp,
+                                    lineHeight = 25.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = MulticaColors.Text,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         if (isPinned) {
                             Text(
                                 if (zh) "已置顶" else "Pinned",
@@ -11844,13 +11870,15 @@ private fun ProjectDetailWebHero(
                             )
                         }
                     }
-                    Text(
-                        preview(project.description) ?: if (zh) "暂无项目描述" else "No project description",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
-                        color = MulticaColors.TextTertiary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    SelectionContainer {
+                        Text(
+                            preview(project.description) ?: if (zh) "暂无项目描述" else "No project description",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                            color = MulticaColors.TextTertiary,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -22988,20 +23016,24 @@ private fun SkillWebDenseRow(
         ) {
             Icon(Icons.Outlined.Folder, contentDescription = null, tint = MulticaColors.Muted, modifier = Modifier.size(20.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(
-                    skill.name,
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
-                    color = MulticaColors.Text,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    clean(skill.description).ifBlank { if (zh) "暂无描述" else "No description" },
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
-                    color = MulticaColors.Muted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                SelectionContainer {
+                    Text(
+                        skill.name,
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
+                        color = MulticaColors.Text,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                SelectionContainer {
+                    Text(
+                        clean(skill.description).ifBlank { if (zh) "暂无描述" else "No description" },
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                        color = MulticaColors.Muted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -25982,18 +26014,19 @@ private fun AgentRosterWebDenseRow(
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(
-                        text = agent.name,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp,
-                            lineHeight = 19.sp,
-                        ),
-                        color = MulticaColors.Text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    SelectionContainer(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = agent.name,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 15.sp,
+                                lineHeight = 19.sp,
+                            ),
+                            color = MulticaColors.Text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
                         text = statusLabel,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold),
@@ -26002,13 +26035,15 @@ private fun AgentRosterWebDenseRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    text = clean(agent.description).ifBlank { compactTaskLabel },
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp),
-                    color = MulticaColors.Muted.copy(alpha = 0.72f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                SelectionContainer {
+                    Text(
+                        text = clean(agent.description).ifBlank { compactTaskLabel },
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                        color = MulticaColors.Muted.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
