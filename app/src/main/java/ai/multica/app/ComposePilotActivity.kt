@@ -175,7 +175,7 @@ class ComposePilotActivity : ComponentActivity() {
         val authStore = AuthStore(this)
         val api = ApiClient(authStore)
         val initialSettingsPageName = intent.getStringExtra("initial_settings_page")
-            ?: getSharedPreferences("multica_auth", Context.MODE_PRIVATE).getString("initial_settings_page", null)
+            ?: getSharedPreferences(BuildConfig.MULTICA_AUTH_PREFS_NAME, Context.MODE_PRIVATE).getString("initial_settings_page", null)
         val initialIssueId = intent.getStringExtra("initial_issue_id")
         val initialTabName = intent.data?.host
         if (intent.getBooleanExtra("preview_agent_transcript", false)) {
@@ -819,7 +819,7 @@ private fun PilotLoginScreen(
                 MulticaPillButton(
                     text = if (zh) "用浏览器打开 Web 登录" else "Open Web Sign In",
                     onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://app.multica.ai/login")))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.MULTICA_WEB_BASE_URL}/login")))
                     },
                     tone = MulticaButtonTone.Ghost,
                     contentDescription = "Login Open Web Sign In",
@@ -9462,7 +9462,7 @@ private fun PilotIssueDetail(
 
             fun copyIssueLink() {
                 val slug = workspaceSlug.ifBlank { workspaceId }
-                val url = "https://app.multica.ai/$slug/issues/${data.issue.id}"
+                val url = "${BuildConfig.MULTICA_WEB_BASE_URL}/$slug/issues/${data.issue.id}"
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Multica issue link", url))
                 copyLinkMessage = if (zh) "链接已复制" else "Link copied"
@@ -21044,7 +21044,7 @@ private fun PilotRuntimeConnectRemotePage(
                 )
                 SettingsCompactCommandRow(
                     title = if (zh) "配置服务" else "Configure service",
-                    command = "multica config set server_url https://api.multica.ai",
+                    command = "multica config set server_url ${BuildConfig.MULTICA_API_BASE_URL}",
                     showDivider = true,
                 )
                 SettingsCompactCommandRow(

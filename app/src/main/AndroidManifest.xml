@@ -6,7 +6,7 @@
         android:allowBackup="true"
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:name=".ComposeVisualAuditActivity"
             android:theme="@style/ComposeAppTheme"
@@ -24,7 +24,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="multica" />
+                <data android:scheme="${deepLinkScheme}" />
             </intent-filter>
         </activity>
         <activity

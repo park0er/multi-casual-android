@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 
 final class AuthStore {
-    private static final String PREFS = "multica_auth";
     private static final String TOKEN = "token";
     private static final String WORKSPACE_ID = "workspace_id";
     private static final String LANGUAGE = "language";
@@ -18,7 +17,7 @@ final class AuthStore {
     private final SharedPreferences prefs;
 
     AuthStore(Context context) {
-        prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        prefs = context.getSharedPreferences(BuildConfig.MULTICA_AUTH_PREFS_NAME, Context.MODE_PRIVATE);
     }
 
     String token() {
