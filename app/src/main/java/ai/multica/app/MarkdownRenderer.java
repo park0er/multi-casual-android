@@ -1,5 +1,6 @@
 package ai.multica.app;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
@@ -169,11 +170,14 @@ final class MarkdownRenderer {
             String[] cells = splitTable(lines.get(r));
             TableRow row = new TableRow(context);
             for (String cell : cells) {
+                String cellText = cell.trim();
                 TextView tv = text(context, "", 14, r == 0 ? textColor : mutedColor);
-                tv.setText(applyInline(cell.trim()));
+                tv.setText(applyInline(cellText));
                 tv.setTypeface(r == 0 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
                 tv.setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8));
                 tv.setBackgroundColor(r == 0 ? palette.tableHeaderBackground : palette.tableCellBackground);
+                tv.setContentDescription("Markdown Table Cell " + cellText);
+                tv.setOnClickListener(v -> showTableCellDialog(context, cellText, textColor));
                 row.addView(tv);
             }
             table.addView(row);
@@ -183,6 +187,17 @@ final class MarkdownRenderer {
         scroll.addView(table);
         scroll.setPadding(0, dp(context, 6), 0, dp(context, 8));
         parent.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private static void showTableCellDialog(Context context, String cellText, int textColor) {
+        TextView content = text(context, cellText, 16, textColor);
+        content.setContentDescription("Markdown Table Cell Detail Text");
+        content.setPadding(dp(context, 20), dp(context, 12), dp(context, 20), dp(context, 4));
+        new AlertDialog.Builder(context)
+                .setTitle("Markdown Table Cell Detail")
+                .setView(content)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     static String[] splitTable(String line) {
@@ -234,6 +249,7 @@ final class MarkdownRenderer {
         tv.setTextSize(sp);
         tv.setTextColor(color);
         tv.setLineSpacing(0, 1.08f);
+        tv.setTextIsSelectable(true);
         return tv;
     }
 
