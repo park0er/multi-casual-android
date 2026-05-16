@@ -179,7 +179,7 @@ public final class MainActivity extends Activity {
                 toast(t("sendCodeFailed"));
             });
         });
-        google.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://app.multica.ai/login"))));
+        google.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.MULTICA_WEB_BASE_URL + "/login"))));
         setContentView(root);
     }
 
