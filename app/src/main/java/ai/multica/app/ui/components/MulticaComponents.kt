@@ -1607,24 +1607,26 @@ fun MulticaCupertinoTextField(
         .semantics { this.contentDescription = fieldDescription }
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
             color = MulticaColors.TextTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         CupertinoBorderedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = fieldModifier,
+            modifier = fieldModifier.heightIn(min = if (singleLine) 44.dp else 48.dp),
             enabled = enabled,
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
             placeholder = { Text(label, color = MulticaColors.TextTertiary) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, lineHeight = 22.sp, color = MulticaColors.TextPrimary),
-            shape = RoundedCornerShape(12.dp),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 21.sp, color = MulticaColors.TextPrimary),
+            shape = RoundedCornerShape(10.dp),
         )
     }
 }
