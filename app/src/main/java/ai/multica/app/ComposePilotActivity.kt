@@ -95,6 +95,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -104,6 +106,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -2495,6 +2498,15 @@ private fun PilotInbox(
                 onDismissRequest = { batchMenuExpanded = false },
             )
         },
+        pinnedHeader = {
+            InboxPinnedTriageHeader(
+                unreadCount = visibleItems.count { !it.read },
+                totalCount = visibleItems.size,
+                loading = loading,
+                zh = zh,
+                onRefresh = onRefresh,
+            )
+        },
     ) {
         if (!resultText.isNullOrBlank()) {
             item {
@@ -2545,6 +2557,49 @@ private fun PilotInbox(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun InboxPinnedTriageHeader(
+    unreadCount: Int,
+    totalCount: Int,
+    loading: Boolean,
+    zh: Boolean,
+    onRefresh: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = "Inbox Sticky Triage Header" },
+        shape = RoundedCornerShape(999.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.82f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MulticaColors.Border.copy(alpha = 0.64f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 7.dp, end = 8.dp, bottom = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Email, contentDescription = null, tint = MulticaColors.Muted, modifier = Modifier.size(16.dp))
+            Text(
+                text = if (zh) "$unreadCount 未读 · $totalCount 总计" else "$unreadCount unread · $totalCount total",
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
+                color = MulticaColors.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            MulticaPillButton(
+                text = if (loading) "..." else if (zh) "刷新" else "Refresh",
+                onClick = onRefresh,
+                tone = MulticaButtonTone.Ghost,
+                enabled = !loading,
+                contentDescription = "Inbox Sticky Refresh",
+            )
         }
     }
 }
@@ -3456,6 +3511,7 @@ private fun PilotChatMessages(
     var cancelling by remember(session.id) { mutableStateOf(false) }
     var headerMenuOpen by remember(session.id) { mutableStateOf(false) }
     var actionError by remember(session.id) { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val hazeState = rememberHazeState()
     val haptic = LocalHapticFeedback.current
@@ -3491,6 +3547,27 @@ private fun PilotChatMessages(
 
     val loaded = state
     val pendingTask = loaded?.getOrNull()?.pendingTask
+    val latestAnchor = remember(loaded, sending, locallyPending, pendingTask?.taskId) {
+        val data = loaded?.getOrNull()
+        listOf(
+            data?.messages?.size?.toString().orEmpty(),
+            data?.messages?.lastOrNull()?.id.orEmpty(),
+            pendingTask?.taskId.orEmpty(),
+            sending.toString(),
+            locallyPending.toString(),
+        ).joinToString("|")
+    }
+
+    LaunchedEffect(latestAnchor) {
+        val data = loaded?.getOrNull() ?: return@LaunchedEffect
+        val messageCount = data.messages.size
+        val hasPending = sending || locallyPending || validChatTaskId(data.pendingTask.taskId)
+        val emptyCount = if (messageCount == 0) 1 else 0
+        val lastIndex = (messageCount + emptyCount + if (hasPending) 1 else 0) - 1
+        if (lastIndex >= 0) {
+            listState.animateScrollToItem(lastIndex)
+        }
+    }
 
     fun archiveSession() {
         if (archiving) return
@@ -3621,22 +3698,12 @@ private fun PilotChatMessages(
                 modifier = Modifier
                     .weight(1f)
                     .hazeSource(hazeState),
+                state = listState,
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val messages = loaded.getOrThrow().messages
                 val activePending = loaded.getOrThrow().pendingTask
-                if (sending || locallyPending || validChatTaskId(activePending.taskId)) {
-                    item {
-                        ChatPendingTimelineCard(
-                            api = api,
-                            workspaceId = workspaceId,
-                            taskId = activePending.taskId,
-                            status = activePending.status.ifBlank { if (sending || locallyPending) "queued" else "" },
-                            zh = zh,
-                        )
-                    }
-                }
                 if (messages.isEmpty()) {
                     item {
                         ChatWindowWebEmptyState(
@@ -3652,6 +3719,17 @@ private fun PilotChatMessages(
                             api = api,
                             workspaceId = workspaceId,
                             taskId = message.taskId,
+                            zh = zh,
+                        )
+                    }
+                }
+                if (sending || locallyPending || validChatTaskId(activePending.taskId)) {
+                    item(key = "chat-latest-progress") {
+                        ChatPendingTimelineCard(
+                            api = api,
+                            workspaceId = workspaceId,
+                            taskId = activePending.taskId,
+                            status = activePending.status.ifBlank { if (sending || locallyPending) "queued" else "" },
                             zh = zh,
                         )
                     }
@@ -4962,7 +5040,7 @@ private fun IssueMaterialListRow(
                     .semantics { contentDescription = "Issue Web Dense Row ${issue.identifier}" }
                     .padding(vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Box(
                     modifier = Modifier.size(24.dp),
@@ -4987,7 +5065,7 @@ private fun IssueMaterialListRow(
                     color = MulticaColors.Muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(66.dp),
+                    modifier = Modifier.widthIn(min = 44.dp, max = 54.dp),
                 )
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
@@ -6613,6 +6691,13 @@ private data class IssueFormMenuOption(
     val onClick: () -> Unit,
 )
 
+private data class PickedIssueAttachment(
+    val uri: Uri,
+    val filename: String,
+    val contentType: String,
+    val image: Boolean,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PilotIssueForm(
@@ -6631,6 +6716,7 @@ private fun PilotIssueForm(
     var saveError by remember(issue?.id) { mutableStateOf<String?>(null) }
     var saving by remember(issue?.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(session.workspace.id, optionsRefresh) {
         optionsState = null
@@ -6687,9 +6773,28 @@ private fun PilotIssueForm(
             var agentCreatePrompt by remember(issue?.id) { mutableStateOf("") }
             var agentCreateSubmitting by remember(issue?.id) { mutableStateOf(false) }
             var agentCreateResult by remember(issue?.id) { mutableStateOf<String?>(null) }
+            var pendingIssueAttachments by remember(issue?.id) { mutableStateOf<List<PickedIssueAttachment>>(emptyList()) }
             val selectedCreateAgent = agentCreateOptions.getOrNull(
                 agentCreateIndex.coerceIn(0, (agentCreateOptions.size - 1).coerceAtLeast(0))
             )
+            val fileAttachmentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri == null) return@rememberLauncherForActivityResult
+                pendingIssueAttachments = pendingIssueAttachments + PickedIssueAttachment(
+                    uri = uri,
+                    filename = displayNameForUri(context, uri),
+                    contentType = context.contentResolver.getType(uri) ?: "application/octet-stream",
+                    image = false,
+                )
+            }
+            val imageAttachmentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri == null) return@rememberLauncherForActivityResult
+                pendingIssueAttachments = pendingIssueAttachments + PickedIssueAttachment(
+                    uri = uri,
+                    filename = displayNameForUri(context, uri),
+                    contentType = context.contentResolver.getType(uri) ?: "image/*",
+                    image = true,
+                )
+            }
 
             fun cycleProject() {
                 projectIndex = (projectIndex + 1) % (options.projects.size + 1)
@@ -6749,15 +6854,29 @@ private fun PilotIssueForm(
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
                         runCatching {
-                            if (issue == null) {
+                            val saved = if (issue == null) {
                                 api.createIssue(titleText, description, session.workspace.id, projectId, status, priority, assignee, dueDateText, parentIssueId)
                             } else {
                                 api.updateIssue(issue, titleText, description, projectId, status, priority, assignee, dueDateText)
                             }
+                            pendingIssueAttachments.forEach { attachment ->
+                                val bytes = context.contentResolver.openInputStream(attachment.uri)?.use { it.readBytes() } ?: ByteArray(0)
+                                api.uploadIssueAttachment(
+                                    session.workspace.id,
+                                    saved.id,
+                                    attachment.filename,
+                                    attachment.contentType,
+                                    bytes,
+                                )
+                            }
+                            saved
                         }
                     }
                     saving = false
-                    result.onSuccess(onSaved).onFailure {
+                    result.onSuccess {
+                        pendingIssueAttachments = emptyList()
+                        onSaved(it)
+                    }.onFailure {
                         saveError = "${if (zh) "保存失败" else "Save failed"}: ${it.message ?: it.toString()}"
                     }
                 }
@@ -6922,6 +7041,17 @@ private fun PilotIssueForm(
                         contentDescription = "Issue Form Description Field",
                         minLines = 4,
                         maxLines = 8,
+                    )
+                }
+                item {
+                    IssueFormAttachmentPickerPanel(
+                        attachments = pendingIssueAttachments,
+                        zh = zh,
+                        onPickFile = { fileAttachmentLauncher.launch("*/*") },
+                        onPickImage = { imageAttachmentLauncher.launch("image/*") },
+                        onRemove = { removeIndex ->
+                            pendingIssueAttachments = pendingIssueAttachments.filterIndexed { index, _ -> index != removeIndex }
+                        },
                     )
                 }
                 item {
@@ -7100,6 +7230,72 @@ private fun PilotIssueForm(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueFormAttachmentPickerPanel(
+    attachments: List<PickedIssueAttachment>,
+    zh: Boolean,
+    onPickFile: () -> Unit,
+    onPickImage: () -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    CompactInfoPanel(
+        modifier = Modifier.semantics(mergeDescendants = false) {
+            contentDescription = "Issue Form Image And File Attachment Picker"
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = if (zh) "附件" else "Attachments",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = MulticaTypeScale.SectionTitle, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
+                    color = MulticaColors.Text,
+                    maxLines = 1,
+                )
+                Text(
+                    text = if (zh) "支持从相册选择图片，也保留通用文件上传" else "Pick images from Photos or attach any file",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                    color = MulticaColors.Muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            MulticaPillButton(
+                text = if (zh) "图片" else "Image",
+                onClick = onPickImage,
+                tone = MulticaButtonTone.Secondary,
+                contentDescription = "Issue Form Pick Image",
+            )
+            MulticaPillButton(
+                text = if (zh) "文件" else "File",
+                onClick = onPickFile,
+                tone = MulticaButtonTone.Ghost,
+                contentDescription = "Issue Form Pick File",
+            )
+        }
+        if (attachments.isEmpty()) {
+            CompactIssueRow(
+                eyebrow = if (zh) "待上传" else "Pending",
+                title = if (zh) "尚未选择附件" else "No attachments selected",
+            )
+        } else {
+            attachments.forEachIndexed { index, attachment ->
+                CompactIssueRow(
+                    eyebrow = if (attachment.image) if (zh) "图片" else "Image" else if (zh) "文件" else "File",
+                    title = attachment.filename,
+                    trailing = attachment.contentType,
+                    showDivider = index < attachments.lastIndex,
+                    contentDescription = "Issue Form Pending Attachment ${attachment.filename}",
+                    onClick = { onRemove(index) },
+                )
             }
         }
     }
@@ -7369,51 +7565,90 @@ private fun IssueDetailHeroCard(
     onEdit: () -> Unit,
     onCopyLink: () -> Unit,
 ) {
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(bottom = 14.dp)
+            .semantics { contentDescription = "Issue Detail Apple Hero Card" },
+        shape = RoundedCornerShape(16.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.88f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MulticaColors.Border.copy(alpha = 0.58f)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = issue.identifier,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MulticaColors.Text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Text(
-            text = issue.title,
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 27.sp,
-                lineHeight = 33.sp,
-            ),
-            color = MulticaColors.Text,
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            item {
-                IssueDetailStatusMenu(
-                    status = issue.status,
-                    updating = updatingField == "status",
-                    zh = zh,
-                    onStatusChange = onStatusChange,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MulticaColors.AccentSoft.copy(alpha = 0.38f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = issue.identifier.takeLastWhile { it.isDigit() }.take(2).ifBlank { issue.identifier.take(2) },
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold),
+                        color = MulticaColors.Accent,
+                        maxLines = 1,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = issue.identifier,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
+                        color = MulticaColors.Muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = issue.title,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            lineHeight = 27.sp,
+                        ),
+                        color = MulticaColors.Text,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.ContentCopy,
+                    contentDescription = "Issue Detail Hero Copy Link",
+                    onClick = onCopyLink,
+                    tone = MulticaButtonTone.Ghost,
+                )
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.Edit,
+                    contentDescription = "Issue Detail Hero Edit",
+                    onClick = onEdit,
+                    tone = MulticaButtonTone.Ghost,
                 )
             }
-            item {
-                IssueDetailPriorityMenu(
-                    priority = issue.priority,
-                    updating = updatingField == "priority",
-                    zh = zh,
-                    onPriorityChange = onPriorityChange,
-                )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                item {
+                    IssueDetailStatusMenu(
+                        status = issue.status,
+                        updating = updatingField == "status",
+                        zh = zh,
+                        onStatusChange = onStatusChange,
+                    )
+                }
+                item {
+                    IssueDetailPriorityMenu(
+                        priority = issue.priority,
+                        updating = updatingField == "priority",
+                        zh = zh,
+                        onPriorityChange = onPriorityChange,
+                    )
+                }
             }
         }
     }
@@ -7720,18 +7955,20 @@ private fun IssueDetailSubIssuesCompactList(
                 )
             }
             if (!subIssuesExpanded && children.size > visibleChildren.size) {
-                CompactIssueRow(
-                    eyebrow = if (zh) "更多" else "More",
-                    title = if (zh) "还有 ${children.size - visibleChildren.size} 个子 Issue" else "${children.size - visibleChildren.size} more sub-issues",
-                    contentDescription = "Issue Sub Issues Show More",
+                MulticaPillButton(
+                    text = if (zh) "展开全部 ${children.size} 个子 Issue" else "Show all ${children.size} sub-issues",
                     onClick = { subIssuesExpanded = true },
+                    tone = MulticaButtonTone.Secondary,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentDescription = "Issue Sub Issues Show More",
                 )
             } else if (subIssuesExpanded && children.size > 4) {
-                CompactIssueRow(
-                    eyebrow = if (zh) "收起" else "Collapse",
-                    title = if (zh) "收起子 Issue" else "Collapse sub-issues",
-                    contentDescription = "Issue Sub Issues Collapse",
+                MulticaPillButton(
+                    text = if (zh) "收起子 Issue" else "Collapse sub-issues",
                     onClick = { subIssuesExpanded = false },
+                    tone = MulticaButtonTone.Ghost,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentDescription = "Issue Sub Issues Collapse",
                 )
             }
         }
@@ -8499,12 +8736,12 @@ private fun IssueCommentCard(
                 }
             },
         shape = shape,
-        color = if (highlighted) MulticaColors.AccentSoft.copy(alpha = 0.36f) else MulticaColors.Surface.copy(alpha = 0.74f),
+        color = MulticaColors.Surface.copy(alpha = if (highlighted) 0.88f else 0.74f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
-            width = if (highlighted) 1.25.dp else 0.75.dp,
-            color = if (highlighted) MulticaColors.Accent.copy(alpha = 0.74f) else MulticaColors.Border.copy(alpha = 0.52f),
+            width = if (highlighted) 1.dp else 0.75.dp,
+            color = if (highlighted) MulticaColors.Border.copy(alpha = 0.86f) else MulticaColors.Border.copy(alpha = 0.52f),
         ),
     ) {
         Column(
@@ -8886,6 +9123,8 @@ private fun PilotIssueDetail(
     var pendingDeleteComment by remember(issueId) { mutableStateOf<Models.Comment?>(null) }
     var replyingCommentId by remember(issueId) { mutableStateOf<String?>(null) }
     var replyDraft by remember(issueId) { mutableStateOf("") }
+    var pendingReplyAttachments by remember(issueId) { mutableStateOf<List<Models.Attachment>>(emptyList()) }
+    var uploadingReplyAttachment by remember(issueId) { mutableStateOf(false) }
     var sendingReply by remember(issueId) { mutableStateOf(false) }
     var replyMessage by remember(issueId) { mutableStateOf<String?>(null) }
     var mutatingComment by remember(issueId) { mutableStateOf(false) }
@@ -8919,7 +9158,6 @@ private fun PilotIssueDetail(
     var cancellingIssueTaskId by remember(issueId) { mutableStateOf<String?>(null) }
     var pendingTerminateTask by remember(issueId) { mutableStateOf<Models.AgentTask?>(null) }
     var issueTaskMessage by remember(issueId) { mutableStateOf<String?>(null) }
-    var showAgentLiveSection by remember(issueId) { mutableStateOf(true) }
     var showPullRequestsSection by remember(issueId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -9259,6 +9497,91 @@ private fun PilotIssueDetail(
                     }
                 }
             }
+            val commentImageAttachmentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri == null || uploadingCommentAttachment) return@rememberLauncherForActivityResult
+                uploadingCommentAttachment = true
+                newCommentMessage = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                            api.uploadIssueAttachment(
+                                workspaceId,
+                                issueId,
+                                displayNameForUri(context, uri),
+                                context.contentResolver.getType(uri) ?: "image/*",
+                                bytes,
+                            )
+                        }
+                    }
+                    uploadingCommentAttachment = false
+                    result.onSuccess { attachment ->
+                        pendingCommentAttachments = pendingCommentAttachments + attachment
+                        val markdown = "![${attachment.filename}](${attachment.url})"
+                        newCommentDraft = newCommentDraft.trimEnd()
+                            .let { if (it.isBlank()) markdown else "$it\n\n$markdown" }
+                        newCommentMessage = if (zh) "评论图片已添加" else "Comment image added"
+                    }.onFailure {
+                        newCommentMessage = "${if (zh) "评论图片上传失败" else "Comment image upload failed"}: ${it.message ?: it.toString()}"
+                    }
+                }
+            }
+            val replyAttachmentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri == null || uploadingReplyAttachment) return@rememberLauncherForActivityResult
+                uploadingReplyAttachment = true
+                replyMessage = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                            api.uploadIssueAttachment(
+                                workspaceId,
+                                issueId,
+                                displayNameForUri(context, uri),
+                                context.contentResolver.getType(uri) ?: "application/octet-stream",
+                                bytes,
+                            )
+                        }
+                    }
+                    uploadingReplyAttachment = false
+                    result.onSuccess { attachment ->
+                        pendingReplyAttachments = pendingReplyAttachments + attachment
+                        val markdown = "[${attachment.filename}](${attachment.url})"
+                        replyDraft = replyDraft.trimEnd().let { if (it.isBlank()) markdown else "$it\n\n$markdown" }
+                        replyMessage = if (zh) "回复附件已添加" else "Reply attachment added"
+                    }.onFailure {
+                        replyMessage = "${if (zh) "回复附件上传失败" else "Reply attachment upload failed"}: ${it.message ?: it.toString()}"
+                    }
+                }
+            }
+            val replyImageAttachmentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                if (uri == null || uploadingReplyAttachment) return@rememberLauncherForActivityResult
+                uploadingReplyAttachment = true
+                replyMessage = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                            api.uploadIssueAttachment(
+                                workspaceId,
+                                issueId,
+                                displayNameForUri(context, uri),
+                                context.contentResolver.getType(uri) ?: "image/*",
+                                bytes,
+                            )
+                        }
+                    }
+                    uploadingReplyAttachment = false
+                    result.onSuccess { attachment ->
+                        pendingReplyAttachments = pendingReplyAttachments + attachment
+                        val markdown = "![${attachment.filename}](${attachment.url})"
+                        replyDraft = replyDraft.trimEnd().let { if (it.isBlank()) markdown else "$it\n\n$markdown" }
+                        replyMessage = if (zh) "回复图片已添加" else "Reply image added"
+                    }.onFailure {
+                        replyMessage = "${if (zh) "回复图片上传失败" else "Reply image upload failed"}: ${it.message ?: it.toString()}"
+                    }
+                }
+            }
 
             fun sendNewComment() {
                 val content = newCommentDraft.trim()
@@ -9284,16 +9607,18 @@ private fun PilotIssueDetail(
 
             fun sendReply(parentId: String) {
                 val content = replyDraft.trim()
-                if (sendingReply || content.isEmpty()) return
+                if (sendingReply || (content.isEmpty() && pendingReplyAttachments.isEmpty())) return
                 sendingReply = true
                 replyMessage = null
+                val attachmentIds = pendingReplyAttachments.map { it.id }
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        runCatching { api.addComment(issueId, workspaceId, content, emptyList(), parentId) }
+                        runCatching { api.addComment(issueId, workspaceId, content, attachmentIds, parentId) }
                     }
                     sendingReply = false
                     result.onSuccess {
                         replyDraft = ""
+                        pendingReplyAttachments = emptyList()
                         replyingCommentId = null
                         replyMessage = if (zh) "回复已发送" else "Reply sent"
                         detailRefresh++
@@ -9380,6 +9705,7 @@ private fun PilotIssueDetail(
                             zh = zh,
                             onDraftChange = { newCommentDraft = it },
                             onAttach = { if (!uploadingCommentAttachment) commentAttachmentLauncher.launch("*/*") },
+                            onAttachImage = { if (!uploadingCommentAttachment) commentImageAttachmentLauncher.launch("image/*") },
                             onSend = { sendNewComment() },
                         )
                     }
@@ -9434,10 +9760,12 @@ private fun PilotIssueDetail(
                 item {
                     IssueDetailWebActionRow(
                         eyebrow = if (zh) "Agent Live" else "Agent live",
-                        title = if (showAgentLiveSection) {
-                            if (zh) "收起实时进展" else "Hide live progress"
+                        title = if (data.activeTasks.isNotEmpty()) {
+                            if (zh) "正在运行的 Agent 任务" else "Active agent task"
+                        } else if (data.runs.isNotEmpty()) {
+                            if (zh) "最近 Agent 运行" else "Latest agent run"
                         } else {
-                            if (zh) "展开实时进展" else "Show live progress"
+                            if (zh) "暂无进展更新" else "No progress updates yet"
                         },
                         subtitle = if (data.activeTasks.isNotEmpty()) {
                             if (zh) "${data.activeTasks.size} 个任务正在运行" else "${data.activeTasks.size} active task(s)"
@@ -9447,55 +9775,51 @@ private fun PilotIssueDetail(
                             if (zh) "Agent live card 对齐 Web activity header" else "Agent live card aligned with the Web activity header"
                         },
                         icon = Icons.Outlined.Bolt,
-                        expanded = showAgentLiveSection,
                         tone = if (data.activeTasks.isNotEmpty()) MulticaButtonTone.Primary else MulticaButtonTone.Ghost,
-                        contentDescription = "Issue Agent Live Web Toggle $WEB_SSOT_EXECUTION_LOG_SECTION",
-                        onClick = { showAgentLiveSection = !showAgentLiveSection },
+                        contentDescription = "Issue Agent Live Web Summary $WEB_SSOT_EXECUTION_LOG_SECTION",
                     )
                 }
-                if (showAgentLiveSection) {
-                    item {
-                        when {
-                            data.activeTasks.isNotEmpty() -> {
-                                val task = data.activeTasks.first()
-                                IssueDetailProgressCard(
-                                    title = if (zh) "活跃 Agent 任务" else "Active agent task",
-                                    subtitle = listOf(task.status, clean(task.triggerSummary).ifBlank { Models.shortId(task.id) })
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(" · "),
-                                    icon = Icons.Outlined.Bolt,
-                                    tone = MulticaButtonTone.Primary,
-                                )
-                            }
-                            data.runs.isNotEmpty() -> {
-                                val run = data.runs.first()
-                                IssueDetailProgressCard(
-                                    title = if (zh) "最近 Agent 运行" else "Latest agent run",
-                                    subtitle = listOf(run.status, shortDate(run.startedAt), clean(run.error))
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(" · "),
-                                    icon = Icons.Outlined.Bolt,
-                                    tone = if (run.status == "failed") MulticaButtonTone.Destructive else MulticaButtonTone.Primary,
-                                    onClick = { selectedRun = run },
-                                )
-                            }
-                            !data.timeline?.entries.isNullOrEmpty() -> {
-                                val entry = data.timeline!!.entries.first()
-                                IssueDetailProgressCard(
-                                    title = clean(entry.action).ifBlank { if (zh) "最近活动" else "Latest activity" },
-                                    subtitle = clean(entry.content).ifBlank { shortDate(entry.createdAt) },
-                                    icon = Icons.Outlined.CalendarMonth,
-                                    tone = MulticaButtonTone.Ghost,
-                                )
-                            }
-                            else -> {
-                                IssueDetailProgressCard(
-                                    title = if (zh) "暂无进展更新" else "No progress updates yet",
-                                    subtitle = if (zh) "Agent 运行、评论和活动会优先显示在这里" else "Agent runs, comments, and activity will surface here first",
-                                    icon = Icons.Outlined.RadioButtonUnchecked,
-                                    tone = MulticaButtonTone.Ghost,
-                                )
-                            }
+                item {
+                    when {
+                        data.activeTasks.isNotEmpty() -> {
+                            val task = data.activeTasks.first()
+                            IssueDetailProgressCard(
+                                title = if (zh) "活跃 Agent 任务" else "Active agent task",
+                                subtitle = listOf(task.status, clean(task.triggerSummary).ifBlank { Models.shortId(task.id) })
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · "),
+                                icon = Icons.Outlined.Bolt,
+                                tone = MulticaButtonTone.Primary,
+                            )
+                        }
+                        data.runs.isNotEmpty() -> {
+                            val run = data.runs.first()
+                            IssueDetailProgressCard(
+                                title = if (zh) "最近 Agent 运行" else "Latest agent run",
+                                subtitle = listOf(run.status, shortDate(run.startedAt), clean(run.error))
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · "),
+                                icon = Icons.Outlined.Bolt,
+                                tone = if (run.status == "failed") MulticaButtonTone.Destructive else MulticaButtonTone.Primary,
+                                onClick = { selectedRun = run },
+                            )
+                        }
+                        !data.timeline?.entries.isNullOrEmpty() -> {
+                            val entry = data.timeline!!.entries.first()
+                            IssueDetailProgressCard(
+                                title = clean(entry.action).ifBlank { if (zh) "最近活动" else "Latest activity" },
+                                subtitle = clean(entry.content).ifBlank { shortDate(entry.createdAt) },
+                                icon = Icons.Outlined.CalendarMonth,
+                                tone = MulticaButtonTone.Ghost,
+                            )
+                        }
+                        else -> {
+                            IssueDetailProgressCard(
+                                title = if (zh) "暂无进展更新" else "No progress updates yet",
+                                subtitle = if (zh) "Agent 运行、评论和活动会优先显示在这里" else "Agent runs, comments, and activity will surface here first",
+                                icon = Icons.Outlined.RadioButtonUnchecked,
+                                tone = MulticaButtonTone.Ghost,
+                            )
                         }
                     }
                 }
@@ -9594,15 +9918,15 @@ private fun PilotIssueDetail(
                 if (comments.isEmpty()) {
                     item { IssueDetailCommentsWebEmptyState(zh = zh) }
                 }
-                val baseVisibleComments = comments.take(if (showExpandedCommentHistory) 8 else 2)
-                val highlightedComment = highlightCommentId?.let { targetId ->
-                    comments.firstOrNull { it.id == targetId || it.parentId == targetId }
+                val baseVisibleCount = if (showExpandedCommentHistory) 8 else 2
+                val highlightedIndex = highlightCommentId?.let { targetId ->
+                    comments.indexOfFirst { it.id == targetId || it.parentId == targetId }.takeIf { it >= 0 }
                 }
-                val visibleComments = if (highlightedComment == null || baseVisibleComments.any { it.id == highlightedComment.id }) {
-                    baseVisibleComments
-                } else {
-                    listOf(highlightedComment) + baseVisibleComments
-                }
+                val visibleCommentCount = maxOf(
+                    baseVisibleCount,
+                    highlightedIndex?.plus(1) ?: 0,
+                ).coerceAtMost(comments.size)
+                val visibleComments = comments.take(visibleCommentCount)
                 items(visibleComments) { comment ->
                     val content = clean(comment.content)
                     val authorName = Models.commentAuthorDisplayName(comment, data.members, data.agents, currentUser)
@@ -9629,6 +9953,7 @@ private fun PilotIssueDetail(
                         onReplyAction = {
                             replyingCommentId = if (replyingCommentId == comment.id) null else comment.id
                             replyDraft = ""
+                            pendingReplyAttachments = emptyList()
                             editingCommentId = null
                             editingCommentContent = ""
                             pendingDeleteComment = null
@@ -9653,13 +9978,21 @@ private fun PilotIssueDetail(
                         IssueCommentReplyBox(
                             parentId = comment.id,
                             draft = replyDraft,
+                            pendingAttachments = pendingReplyAttachments,
                             agents = data.agents,
+                            uploadingAttachment = uploadingReplyAttachment,
                             sending = sendingReply,
                             zh = zh,
                             onDraftChange = { replyDraft = it },
+                            onAttach = { if (!uploadingReplyAttachment) replyAttachmentLauncher.launch("*/*") },
+                            onAttachImage = { if (!uploadingReplyAttachment) replyImageAttachmentLauncher.launch("image/*") },
+                            onRemoveAttachment = { removeIndex ->
+                                pendingReplyAttachments = pendingReplyAttachments.filterIndexed { index, _ -> index != removeIndex }
+                            },
                             onCancel = {
                                 replyingCommentId = null
                                 replyDraft = ""
+                                pendingReplyAttachments = emptyList()
                                 replyMessage = null
                             },
                             onSend = { sendReply(comment.id) },
@@ -10169,15 +10502,23 @@ private suspend fun attachIssueLabelWithRetry(
 private fun IssueCommentReplyBox(
     parentId: String,
     draft: String,
+    pendingAttachments: List<Models.Attachment>,
     agents: List<Models.Agent>,
+    uploadingAttachment: Boolean,
     sending: Boolean,
     zh: Boolean,
     onDraftChange: (String) -> Unit,
+    onAttach: () -> Unit,
+    onAttachImage: () -> Unit,
+    onRemoveAttachment: (Int) -> Unit,
     onCancel: () -> Unit,
     onSend: () -> Unit,
 ) {
     var mentionPickerOpen by remember(parentId) { mutableStateOf(false) }
     var mentionQuery by remember(parentId) { mutableStateOf("") }
+    val focusRequester = remember(parentId) { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val mentionAgents = remember(agents, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
         agents
@@ -10190,6 +10531,11 @@ private fun IssueCommentReplyBox(
             }
             .sortedBy { it.name.lowercase() }
             .take(8)
+    }
+    LaunchedEffect(parentId) {
+        delay(180)
+        focusRequester.requestFocus()
+        keyboard?.show()
     }
 
     Surface(
@@ -10217,16 +10563,44 @@ private fun IssueCommentReplyBox(
                 onValueChange = onDraftChange,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(focusRequester)
                     .semantics(mergeDescendants = true) { contentDescription = "Issue Comment Reply Input $parentId" },
                 label = if (zh) "写回复..." else "Write a reply...",
                 minLines = 2,
                 maxLines = 5,
             )
+            if (pendingAttachments.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    pendingAttachments.forEachIndexed { index, attachment ->
+                        CompactIssueRow(
+                            eyebrow = if (zh) "待发送附件" else "Pending attachment",
+                            title = attachment.filename.ifBlank { Models.shortId(attachment.id) },
+                            trailing = attachment.contentType,
+                            contentDescription = "Issue Comment Reply Pending Attachment ${attachment.id}",
+                            onClick = { onRemoveAttachment(index) },
+                        )
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                MulticaPillButton(
+                    text = if (uploadingAttachment) "..." else if (zh) "图片" else "Image",
+                    onClick = onAttachImage,
+                    tone = MulticaButtonTone.Secondary,
+                    contentDescription = "Issue Comment Reply Attach Image",
+                    enabled = !uploadingAttachment,
+                )
+                MulticaPillButton(
+                    text = "+",
+                    onClick = onAttach,
+                    tone = MulticaButtonTone.Ghost,
+                    contentDescription = "Issue Comment Reply Attach",
+                    enabled = !uploadingAttachment,
+                )
                 MulticaPillButton(
                     text = "@",
                     onClick = { mentionPickerOpen = !mentionPickerOpen },
@@ -10235,7 +10609,11 @@ private fun IssueCommentReplyBox(
                 )
                 MulticaPillButton(
                     text = if (zh) "取消" else "Cancel",
-                    onClick = onCancel,
+                    onClick = {
+                        focusManager.clearFocus(force = true)
+                        keyboard?.hide()
+                        onCancel()
+                    },
                     tone = MulticaButtonTone.Ghost,
                     modifier = Modifier.weight(1f),
                 )
@@ -10243,7 +10621,7 @@ private fun IssueCommentReplyBox(
                     text = if (sending) "..." else if (zh) "发送回复" else "Send Reply",
                     onClick = onSend,
                     tone = MulticaButtonTone.Primary,
-                    enabled = !sending && draft.trim().isNotEmpty(),
+                    enabled = !sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty()),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -10375,6 +10753,7 @@ private fun IssueCommentInputBar(
     zh: Boolean,
     onDraftChange: (String) -> Unit,
     onAttach: () -> Unit,
+    onAttachImage: () -> Unit,
     onSend: () -> Unit,
 ) {
     var mentionPickerOpen by remember { mutableStateOf(false) }
@@ -10442,9 +10821,15 @@ private fun IssueCommentInputBar(
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     MulticaPillButton(
-                        text = if (uploadingAttachment) "..." else "+",
-                        onClick = onAttach,
+                        text = if (uploadingAttachment) "..." else if (zh) "图" else "Img",
+                        onClick = onAttachImage,
                         tone = MulticaButtonTone.Secondary,
+                        contentDescription = "Issue Comment Attach Image",
+                    )
+                    MulticaPillButton(
+                        text = "+",
+                        onClick = onAttach,
+                        tone = MulticaButtonTone.Ghost,
                         contentDescription = "Issue Comment Attach",
                     )
                     MulticaPillButton(
@@ -10457,7 +10842,7 @@ private fun IssueCommentInputBar(
                         value = draft,
                         onValueChange = onDraftChange,
                         modifier = Modifier.weight(1f),
-                        label = if (zh) "写评论..." else "Write a comment...",
+                        label = if (zh) "评论" else "Comment",
                         contentDescription = "Issue Comment Input",
                         minLines = 1,
                         maxLines = 4,
@@ -11398,17 +11783,17 @@ private fun ProjectDetailWebHero(
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = "Project Detail Web Hero" },
-        shape = RoundedCornerShape(8.dp),
-        color = MulticaColors.Surface,
+        shape = RoundedCornerShape(16.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.9f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MulticaColors.Border.copy(alpha = 0.58f)),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MulticaColors.Border.copy(alpha = 0.58f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 15.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -11417,9 +11802,9 @@ private fun ProjectDetailWebHero(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MulticaColors.AccentSoft.copy(alpha = 0.22f)),
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(MulticaColors.AccentSoft.copy(alpha = 0.38f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -11442,8 +11827,8 @@ private fun ProjectDetailWebHero(
                             project.name,
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 17.sp,
-                                lineHeight = 21.sp,
+                                fontSize = 20.sp,
+                                lineHeight = 25.sp,
                                 fontWeight = FontWeight.SemiBold,
                             ),
                             color = MulticaColors.Text,
@@ -12020,6 +12405,11 @@ private fun PilotProjects(
     }
 
     if (formOpen) {
+        BackHandler(enabled = true) {
+            formOpen = false
+            editingProject = null
+            resultText = null
+        }
         PilotListPage(
             title = if (editingProject == null) {
                 if (zh) "新建项目" else "New Project"
@@ -18224,13 +18614,19 @@ private fun AutopilotFormTriggerConfigWebSection(
             )
             AutopilotFormWebStepHeader(
                 title = if (zh) "Schedule / event" else "Schedule / event",
-                subtitle = if (zh) "创建时同步生成 schedule trigger" else "Creates the schedule trigger together with the autopilot",
+                subtitle = if (zh) "先选常用节奏，必要时再编辑高级 Cron" else "Pick a friendly cadence first; edit advanced Cron only when needed",
                 contentDescription = "Autopilot Form Schedule Web Step",
+            )
+            AutopilotSchedulePresetStrip(
+                selectedCron = cron,
+                zh = zh,
+                onCronSelected = onCronChange,
+                contentDescription = "Autopilot Form Friendly Schedule Presets",
             )
             MulticaTextField(
                 value = cron,
                 onValueChange = onCronChange,
-                label = if (zh) "Cron 表达式" else "Cron expression",
+                label = if (zh) "高级 Cron" else "Advanced Cron",
                 singleLine = true,
                 contentDescription = "Autopilot Form Trigger Cron",
             )
@@ -18287,6 +18683,75 @@ private fun AutopilotFormWebStepHeader(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+private data class AutopilotSchedulePreset(
+    val cron: String,
+    val labelZh: String,
+    val labelEn: String,
+    val detailZh: String,
+    val detailEn: String,
+)
+
+private val AUTOPILOT_SCHEDULE_PRESETS = listOf(
+    AutopilotSchedulePreset("0 9 * * 1-5", "工作日上午", "Weekday morning", "周一至周五 09:00", "Mon-Fri 09:00"),
+    AutopilotSchedulePreset("0 18 * * 1-5", "工作日傍晚", "Weekday evening", "周一至周五 18:00", "Mon-Fri 18:00"),
+    AutopilotSchedulePreset("0 9 * * 1", "每周一", "Every Monday", "周一 09:00", "Monday 09:00"),
+    AutopilotSchedulePreset("0 9 1 * *", "每月 1 日", "Monthly", "每月 1 日 09:00", "1st day 09:00"),
+    AutopilotSchedulePreset("*/15 * * * *", "每 15 分钟", "Every 15 min", "高频检查", "High-frequency check"),
+)
+
+@Composable
+private fun AutopilotSchedulePresetStrip(
+    selectedCron: String,
+    zh: Boolean,
+    onCronSelected: (String) -> Unit,
+    contentDescription: String,
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { this.contentDescription = contentDescription },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(AUTOPILOT_SCHEDULE_PRESETS) { preset ->
+            val selected = preset.cron == selectedCron.trim()
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable { onCronSelected(preset.cron) }
+                    .semantics(mergeDescendants = true) {
+                        this.contentDescription = "Autopilot Friendly Schedule ${if (zh) preset.labelZh else preset.labelEn}"
+                    },
+                shape = RoundedCornerShape(999.dp),
+                color = if (selected) MulticaColors.AccentSoft.copy(alpha = 0.62f) else MulticaColors.Background,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (selected) MulticaColors.Accent.copy(alpha = 0.42f) else MulticaColors.Border.copy(alpha = 0.58f),
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
+                    Text(
+                        text = if (zh) preset.labelZh else preset.labelEn,
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
+                        color = if (selected) MulticaColors.Accent else MulticaColors.Text,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = if (zh) preset.detailZh else preset.detailEn,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                        color = MulticaColors.Muted,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -18358,6 +18823,12 @@ private fun AutopilotTriggerComposerWebPanel(
                     .semantics { contentDescription = "Autopilot Trigger Composer Fields" },
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                AutopilotSchedulePresetStrip(
+                    selectedCron = cron,
+                    zh = zh,
+                    onCronSelected = onCronChange,
+                    contentDescription = "Autopilot Trigger Composer Friendly Schedule Presets",
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -18365,7 +18836,7 @@ private fun AutopilotTriggerComposerWebPanel(
                     MulticaTextField(
                         value = cron,
                         onValueChange = onCronChange,
-                        label = if (zh) "Cron 表达式" else "Cron expression",
+                        label = if (zh) "高级 Cron" else "Advanced Cron",
                         singleLine = true,
                         contentDescription = "Autopilot Form Trigger Cron",
                         modifier = Modifier.weight(1f),
@@ -22467,6 +22938,27 @@ private fun SkillsWebNoMatchesState(
 }
 
 @Composable
+private fun SkillTinyMetaPill(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = if (text.firstOrNull()?.isDigit() == true) FontFamily.Monospace else FontFamily.Default,
+        ),
+        color = MulticaColors.TextTertiary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MulticaColors.Background)
+            .border(1.dp, MulticaColors.Border.copy(alpha = 0.54f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 7.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
 private fun SkillWebDenseRow(
     skill: Models.Skill,
     zh: Boolean,
@@ -22490,70 +22982,38 @@ private fun SkillWebDenseRow(
                 .fillMaxWidth()
                 .border(1.dp, MulticaColors.Border.copy(alpha = 0.58f), RoundedCornerShape(8.dp))
                 .clickable(onClick = onOpen)
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
         ) {
-            Icon(Icons.Outlined.Folder, contentDescription = null, tint = MulticaColors.Muted, modifier = Modifier.size(17.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        skill.name,
-                        modifier = Modifier.weight(1f, fill = false),
-                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
-                        color = MulticaColors.Text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        "${skillFileCount(skill)}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace),
-                        color = MulticaColors.TextTertiary,
-                        maxLines = 1,
-                    )
-                }
+            Icon(Icons.Outlined.Folder, contentDescription = null, tint = MulticaColors.Muted, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(
+                    skill.name,
+                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold),
+                    color = MulticaColors.Text,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     clean(skill.description).ifBlank { if (zh) "暂无描述" else "No description" },
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
                     color = MulticaColors.Muted,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            Text(
-                skillOriginLabel(skill, zh),
-                modifier = Modifier
-                    .width(104.dp)
-                    .semantics { contentDescription = "Skill Source ${skillOriginLabel(skill, zh)}" },
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                color = if (skillOriginKey(skill) == "manual") MulticaColors.TextTertiary else MulticaColors.Accent,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-            Column(
-                modifier = Modifier.width(86.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    text = if (skillCanEdit(skill)) if (zh) "可编辑" else "Editable" else if (zh) "只读" else "Read-only",
-                    modifier = Modifier.semantics { contentDescription = "Skill Editable State ${skill.name}" },
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold),
-                    color = if (skillCanEdit(skill)) MulticaColors.Accent else MulticaColors.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = skillUpdatedLabel(skill, zh),
-                    modifier = Modifier.semantics { contentDescription = "Skill Updated ${skill.name}" },
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp, fontFamily = FontFamily.Monospace),
-                    color = MulticaColors.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = "Skill Row Metadata ${skill.name}" },
+                ) {
+                    item { SkillTinyMetaPill("${skillFileCount(skill)} files") }
+                    item { SkillTinyMetaPill(skillOriginLabel(skill, zh)) }
+                    item { SkillTinyMetaPill(if (skillCanEdit(skill)) if (zh) "可编辑" else "Editable" else if (zh) "只读" else "Read-only") }
+                    item { SkillTinyMetaPill(skillUpdatedLabel(skill, zh)) }
+                }
             }
             MulticaIconPillButton(
                 icon = Icons.Outlined.MoreHoriz,
