@@ -1,0 +1,13 @@
+## Copy this file to local.properties. local.properties is gitignored.
+## Keep real analytics keys out of the public repository.
+
+multicaUmengPublicAppKey=
+multicaPostHogPublicApiKey=
+multicaPostHogPublicHost=https://us.i.posthog.com
+multicaAnalyticsRoute=auto
+
+## Optional release signing. Keep real values only in local.properties or CI secrets.
+multicaReleaseStoreFile=
+multicaReleaseStorePassword=
+multicaReleaseKeyAlias=
+multicaReleaseKeyPassword=
