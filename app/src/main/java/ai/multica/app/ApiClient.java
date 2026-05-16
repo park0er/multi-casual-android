@@ -21,7 +21,6 @@ final class ApiClient {
         T parse(JSONObject json) throws Exception;
     }
 
-    private static final String BASE = "https://api.multica.ai";
     private final AuthStore authStore;
 
     ApiClient(AuthStore authStore) {
@@ -1368,7 +1367,7 @@ final class ApiClient {
     private JSONObject requestMultipart(String path, JSONObject query, JSONObject fields, String fieldName, String filename,
                                         String contentType, byte[] data) throws Exception {
         String boundary = "Boundary-" + System.currentTimeMillis();
-        URL url = new URL(BASE + path + queryString(query));
+        URL url = new URL(BuildConfig.MULTICA_API_BASE_URL + path + queryString(query));
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setConnectTimeout(15000);
@@ -1429,7 +1428,7 @@ final class ApiClient {
 
     private JSONObject requestObject(String method, String path, JSONObject query, JSONObject body,
                                      Map<String, String> extraHeaders, int connectTimeoutMs, int readTimeoutMs) throws Exception {
-        URL url = new URL(BASE + path + queryString(query));
+        URL url = new URL(BuildConfig.MULTICA_API_BASE_URL + path + queryString(query));
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod(method);
         conn.setConnectTimeout(connectTimeoutMs);
