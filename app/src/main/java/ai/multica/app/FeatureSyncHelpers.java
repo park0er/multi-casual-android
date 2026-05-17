@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 final class AgentMentionMarkdown {
     static String markdown(String name, String agentId) {
@@ -19,6 +21,114 @@ final class AgentMentionMarkdown {
     }
 
     private AgentMentionMarkdown() {
+    }
+}
+
+final class IssueCommentRichText {
+    private static final Pattern ISSUE_IDENTIFIER = Pattern.compile("[A-Z][A-Z0-9]+-\\d+");
+
+    static String mentionDisplayLabel(String mentionType, String mentionId, String fallbackLabel,
+                                      List<Models.Member> members, List<Models.Agent> agents,
+                                      Models.User currentUser) {
+        String resolved = resolveMentionName(mentionType, mentionId, members, agents, currentUser);
+        String label = resolved.isEmpty() ? cleanMentionFallback(fallbackLabel, mentionId) : resolved;
+        if (label.startsWith("@")) return label;
+        return "@" + label;
+    }
+
+    static int issueIdentifierEndAt(String value, int start) {
+        if (value == null || start < 0 || start >= value.length()) return -1;
+        Matcher matcher = ISSUE_IDENTIFIER.matcher(value);
+        matcher.region(start, value.length());
+        if (!matcher.lookingAt()) return -1;
+        int end = matcher.end();
+        if (!hasIdentifierBoundary(value, start, end)) return -1;
+        return end;
+    }
+
+    static List<String> issueIdentifiersOutsideCodeAndLinks(String value) {
+        ArrayList<String> identifiers = new ArrayList<>();
+        if (value == null || value.isEmpty()) return identifiers;
+        int i = 0;
+        while (i < value.length()) {
+            if (value.charAt(i) == '`') {
+                int end = value.indexOf('`', i + 1);
+                i = end > i ? end + 1 : i + 1;
+                continue;
+            }
+            int markdownLinkEnd = markdownLinkEndAt(value, i);
+            if (markdownLinkEnd > i) {
+                i = markdownLinkEnd;
+                continue;
+            }
+            int end = issueIdentifierEndAt(value, i);
+            if (end > i) {
+                identifiers.add(value.substring(i, end));
+                i = end;
+            } else {
+                i++;
+            }
+        }
+        return identifiers;
+    }
+
+    private static String resolveMentionName(String mentionType, String mentionId,
+                                             List<Models.Member> members, List<Models.Agent> agents,
+                                             Models.User currentUser) {
+        String type = mentionType == null ? "" : mentionType.toLowerCase(Locale.US);
+        String id = mentionId == null ? "" : mentionId;
+        if ("agent".equals(type)) {
+            for (Models.Agent agent : agents) {
+                if (id.equals(agent.id)) return clean(agent.name);
+            }
+        }
+        if ("member".equals(type) || "user".equals(type)) {
+            if (currentUser != null && id.equals(currentUser.id)) return clean(currentUser.name);
+            for (Models.Member member : members) {
+                if (id.equals(member.id) || id.equals(member.userId)) return clean(member.displayName);
+            }
+        }
+        for (Models.Agent agent : agents) {
+            if (id.equals(agent.id)) return clean(agent.name);
+        }
+        if (currentUser != null && id.equals(currentUser.id)) return clean(currentUser.name);
+        for (Models.Member member : members) {
+            if (id.equals(member.id) || id.equals(member.userId)) return clean(member.displayName);
+        }
+        return "";
+    }
+
+    private static String cleanMentionFallback(String fallbackLabel, String mentionId) {
+        String fallback = clean(fallbackLabel);
+        while (fallback.startsWith("@")) fallback = fallback.substring(1).trim();
+        return fallback.isEmpty() ? Models.shortId(mentionId) : fallback;
+    }
+
+    private static boolean hasIdentifierBoundary(String value, int start, int end) {
+        boolean left = start == 0 || !isIssueIdentifierNeighbor(value.charAt(start - 1));
+        boolean right = end >= value.length() || !isIssueIdentifierNeighbor(value.charAt(end));
+        return left && right;
+    }
+
+    private static boolean isIssueIdentifierNeighbor(char ch) {
+        return Character.isLetterOrDigit(ch) || ch == '_' || ch == '-';
+    }
+
+    private static int markdownLinkEndAt(String value, int start) {
+        if (start < 0 || start >= value.length() || value.charAt(start) != '[') return -1;
+        int labelEnd = value.indexOf("](", start + 1);
+        if (labelEnd <= start + 1) return -1;
+        int urlEnd = value.indexOf(')', labelEnd + 2);
+        return urlEnd > labelEnd ? urlEnd + 1 : -1;
+    }
+
+    private static String clean(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return "null".equalsIgnoreCase(trimmed) ? "" : trimmed;
+    }
+
+    private IssueCommentRichText() {
     }
 }
 

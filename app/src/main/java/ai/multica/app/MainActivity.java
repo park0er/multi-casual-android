@@ -472,6 +472,7 @@ public final class MainActivity extends Activity {
         Map<String, List<Models.Issue>> grouped = new HashMap<>();
         for (Models.Issue issue : issues) grouped.computeIfAbsent(issue.status, k -> new ArrayList<>()).add(issue);
         for (String status : Models.STATUS_VALUES) {
+            if ("cancelled".equals(status)) continue;
             LinearLayout col = vertical();
             col.setPadding(dp(8), dp(8), dp(8), dp(8));
             col.setBackground(roundedStroke(0xFFF3F4F6, BORDER, 14, 1));
