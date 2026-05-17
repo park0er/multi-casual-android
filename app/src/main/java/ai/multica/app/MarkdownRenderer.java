@@ -3,6 +3,7 @@ package ai.multica.app;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Typeface;
+import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
@@ -12,6 +13,7 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.text.style.TypefaceSpan;
 import android.text.style.UnderlineSpan;
+import android.view.MotionEvent;
 import android.view.ViewGroup;
 import android.view.View;
 import android.widget.HorizontalScrollView;
@@ -30,6 +32,7 @@ final class MarkdownRenderer {
 
     interface LinkHandler {
         String resolveMentionLabel(String mentionType, String mentionId, String fallbackLabel);
+        void openIssueId(String issueId);
         void openIssueIdentifier(String identifier);
     }
 
@@ -124,6 +127,7 @@ final class MarkdownRenderer {
                 TextView bullet = text(context, "• " + trimmed.substring(2), 15, textColor);
                 bullet.setText(applyInline(bullet.getText().toString(), linkHandler));
                 bullet.setMovementMethod(LinkMovementMethod.getInstance());
+                enableClickableSpans(bullet);
                 bullet.setPadding(dp(context, 8), dp(context, 2), 0, dp(context, 2));
                 parent.addView(bullet);
             } else {
@@ -148,6 +152,7 @@ final class MarkdownRenderer {
         TextView p = text(context, String.join("\n", paragraph), 15, textColor);
         p.setText(applyInline(p.getText().toString(), linkHandler));
         p.setMovementMethod(LinkMovementMethod.getInstance());
+        enableClickableSpans(p);
         p.setPadding(0, dp(context, 2), 0, dp(context, 6));
         parent.addView(p);
         paragraph.clear();
@@ -194,6 +199,7 @@ final class MarkdownRenderer {
                 TextView tv = text(context, "", 14, r == 0 ? textColor : mutedColor);
                 tv.setText(applyInline(cellText, linkHandler));
                 tv.setMovementMethod(LinkMovementMethod.getInstance());
+                enableClickableSpans(tv);
                 tv.setTypeface(r == 0 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
                 tv.setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8));
                 tv.setBackgroundColor(r == 0 ? palette.tableHeaderBackground : palette.tableCellBackground);
@@ -325,6 +331,12 @@ final class MarkdownRenderer {
     private static void appendMarkdownLink(SpannableStringBuilder out, ParsedMarkdownLink link, LinkHandler linkHandler) {
         MentionUri mention = MentionUri.parse(link.url);
         if (mention != null) {
+            if ("issue".equals(mention.type)) {
+                appendLinkedText(out, link.label, view -> {
+                    if (linkHandler != null) linkHandler.openIssueId(mention.id);
+                });
+                return;
+            }
             String label = linkHandler == null
                     ? IssueCommentRichText.mentionDisplayLabel(mention.type, mention.id, link.label, new ArrayList<>(), new ArrayList<>(), null)
                     : linkHandler.resolveMentionLabel(mention.type, mention.id, link.label);
@@ -362,6 +374,35 @@ final class MarkdownRenderer {
                 }
             }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
+    }
+
+    private static void enableClickableSpans(TextView textView) {
+        CharSequence text = textView.getText();
+        if (!(text instanceof Spanned)) return;
+        Spanned spanned = (Spanned) text;
+        if (spanned.getSpans(0, spanned.length(), ClickableSpan.class).length == 0) return;
+        textView.setOnTouchListener((view, event) -> {
+            if (event.getAction() != MotionEvent.ACTION_UP && event.getAction() != MotionEvent.ACTION_DOWN) return false;
+            TextView touchedTextView = (TextView) view;
+            ClickableSpan span = clickableSpanAt(touchedTextView, event);
+            if (span == null) return false;
+            if (event.getAction() == MotionEvent.ACTION_UP) span.onClick(touchedTextView);
+            return true;
+        });
+    }
+
+    private static ClickableSpan clickableSpanAt(TextView textView, MotionEvent event) {
+        CharSequence text = textView.getText();
+        Layout layout = textView.getLayout();
+        if (!(text instanceof Spanned) || layout == null) return null;
+        int x = (int) event.getX() - textView.getTotalPaddingLeft() + textView.getScrollX();
+        int y = (int) event.getY() - textView.getTotalPaddingTop() + textView.getScrollY();
+        if (x < 0 || y < 0 || y > layout.getHeight()) return null;
+        int line = layout.getLineForVertical(y);
+        if (x < layout.getLineLeft(line) || x > layout.getLineRight(line)) return null;
+        int offset = layout.getOffsetForHorizontal(line, x);
+        ClickableSpan[] spans = ((Spanned) text).getSpans(offset, offset, ClickableSpan.class);
+        return spans.length == 0 ? null : spans[0];
     }
 
     private static ParsedMarkdownLink parseMarkdownLink(String value, int start) {
