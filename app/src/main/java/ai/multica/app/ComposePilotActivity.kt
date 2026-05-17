@@ -1472,6 +1472,9 @@ private fun ComposePilotShell(
     var issueDetailId by remember(session.workspace.id, initialIssueId) {
         mutableStateOf(initialIssueId?.takeIf { it.isNotBlank() })
     }
+    var issueDetailBackStack by remember(session.workspace.id, initialIssueId) {
+        mutableStateOf<List<String>>(emptyList())
+    }
     var projectDetail by remember { mutableStateOf<Models.Project?>(null) }
     var issueFormOpen by remember { mutableStateOf(false) }
     var issueFormIssue by remember { mutableStateOf<Models.Issue?>(null) }
@@ -1496,6 +1499,39 @@ private fun ComposePilotShell(
                 runCatching { api.markInboxRead(session.workspace.id, item.id) }
             }
             result.onSuccess { tabRefresh++ }
+        }
+    }
+
+    fun clearIssueDetail() {
+        issueDetailId = null
+        issueDetailBackStack = emptyList()
+        inboxIssueContext = null
+    }
+
+    fun openIssueDetail(issueId: String, preserveCurrent: Boolean = false) {
+        val currentIssueId = issueDetailId
+        if (preserveCurrent && !currentIssueId.isNullOrBlank() && currentIssueId != issueId) {
+            issueDetailBackStack = issueDetailBackStack + currentIssueId
+        } else if (!preserveCurrent) {
+            issueDetailBackStack = emptyList()
+        }
+        issueDetailId = issueId
+        inboxIssueContext = null
+    }
+
+    fun closeIssueDetail() {
+        if (issueDetailBackStack.isNotEmpty()) {
+            val previousIssueId = issueDetailBackStack.last()
+            issueDetailBackStack = issueDetailBackStack.dropLast(1)
+            issueDetailId = previousIssueId
+            inboxIssueContext = null
+            return
+        }
+        if (inboxIssueContext != null) tabRefresh++
+        clearIssueDetail()
+        if (returnToSearchAfterDetail) {
+            searchOpen = true
+            returnToSearchAfterDetail = false
         }
     }
 
@@ -1569,13 +1605,7 @@ private fun ComposePilotShell(
             chatSession != null -> chatSession = null
             chatOpen -> chatOpen = false
             issueDetailId != null -> {
-                if (inboxIssueContext != null) tabRefresh++
-                issueDetailId = null
-                inboxIssueContext = null
-                if (returnToSearchAfterDetail) {
-                    searchOpen = true
-                    returnToSearchAfterDetail = false
-                }
+                closeIssueDetail()
             }
             projectDetail != null -> {
                 projectDetail = null
@@ -1600,6 +1630,7 @@ private fun ComposePilotShell(
             selectedTab = MulticaTab.Settings
             settingsPage = PilotSettingsPage.WorkspaceDetails
             issueDetailId = null
+            issueDetailBackStack = emptyList()
             inboxIssueContext = null
             returnToSearchAfterDetail = false
             projectDetail = null
@@ -1615,6 +1646,7 @@ private fun ComposePilotShell(
         onSearchClick = {
             searchOpen = true
             issueDetailId = null
+            issueDetailBackStack = emptyList()
             inboxIssueContext = null
             returnToSearchAfterDetail = false
             projectDetail = null
@@ -1630,6 +1662,7 @@ private fun ComposePilotShell(
         onChatClick = {
             selectedTab = MulticaTab.Inbox
             issueDetailId = null
+            issueDetailBackStack = emptyList()
             inboxIssueContext = null
             returnToSearchAfterDetail = false
             projectDetail = null
@@ -1646,6 +1679,7 @@ private fun ComposePilotShell(
         onTabClick = {
             selectedTab = it
             issueDetailId = null
+            issueDetailBackStack = emptyList()
             inboxIssueContext = null
             returnToSearchAfterDetail = false
             projectDetail = null
@@ -1685,6 +1719,7 @@ private fun ComposePilotShell(
                     projectDetail = null
                     chatOpen = false
                     chatSession = null
+                    issueDetailBackStack = emptyList()
                     issueDetailId = saved.id
                     tabRefresh++
                 },
@@ -1699,8 +1734,7 @@ private fun ComposePilotShell(
                 onBack = { searchOpen = false },
                 onIssueClick = {
                     searchOpen = false
-                    issueDetailId = it
-                    inboxIssueContext = null
+                    openIssueDetail(it)
                     returnToSearchAfterDetail = true
                 },
                 onProjectClick = {
@@ -1763,18 +1797,10 @@ private fun ComposePilotShell(
                 currentUser = session.user,
                 zh = zh,
                 onBack = {
-                    if (activeInboxContext != null) tabRefresh++
-                    issueDetailId = null
-                    inboxIssueContext = null
-                    if (returnToSearchAfterDetail) {
-                        searchOpen = true
-                        returnToSearchAfterDetail = false
-                    }
+                    closeIssueDetail()
                 },
                 onOpenIssue = {
-                    issueDetailId = it
-                    inboxIssueContext = null
-                    returnToSearchAfterDetail = false
+                    openIssueDetail(it, preserveCurrent = true)
                 },
                 onEditIssue = {
                     issueFormIssue = it
@@ -1789,8 +1815,7 @@ private fun ComposePilotShell(
                     issueFormOpen = true
                 },
                 onDeleted = {
-                    issueDetailId = null
-                    inboxIssueContext = null
+                    clearIssueDetail()
                     returnToSearchAfterDetail = false
                     tabRefresh++
                 },
@@ -1798,6 +1823,7 @@ private fun ComposePilotShell(
                 inboxItemId = activeInboxContext?.itemId,
                 inboxNextIssueId = activeInboxContext?.nextIssueId,
                 onInboxDone = { nextIssueId ->
+                    issueDetailBackStack = emptyList()
                     issueDetailId = nextIssueId.takeIf { !it.isNullOrBlank() }
                     inboxIssueContext = null
                     tabRefresh++
@@ -1817,7 +1843,7 @@ private fun ComposePilotShell(
                     }
                 },
                 onIssueClick = {
-                    issueDetailId = it
+                    openIssueDetail(it)
                     returnToSearchAfterDetail = false
                 },
             )
@@ -1831,11 +1857,12 @@ private fun ComposePilotShell(
                 authStore = authStore,
                 selectedIssueIds = selectedIssueIds,
                 onSelectedIssueIdsChange = { selectedIssueIds = it },
-                onIssueClick = { issueDetailId = it },
+                onIssueClick = { openIssueDetail(it) },
                 onInboxIssueClick = { item, nextIssueId ->
                     if (item.issueId.isNotBlank()) {
                         markInboxReadOnOpen(item)
                         selectedTab = MulticaTab.Inbox
+                        issueDetailBackStack = emptyList()
                         issueDetailId = item.issueId
                         inboxIssueContext = InboxIssueContext(
                             itemId = item.id,
@@ -4503,6 +4530,8 @@ private fun issueStatusIcon(status: String?): ImageVector = when (status) {
     else -> Icons.Outlined.Archive
 }
 
+private fun issueBoardStatusValues(): List<String> = Models.STATUS_VALUES.filter { it != "cancelled" }
+
 private fun sortIssues(
     issues: List<Models.Issue>,
     option: IssueSortOption,
@@ -5718,10 +5747,11 @@ private fun PilotIssues(
 
     fun moveBoardIssue(issue: Models.Issue, direction: Int) {
         if (movingBoardIssueId != null || direction == 0) return
-        val currentIndex = Models.STATUS_VALUES.indexOf(issue.status).takeIf { it >= 0 } ?: return
-        val targetIndex = (currentIndex + direction).coerceIn(0, Models.STATUS_VALUES.lastIndex)
+        val boardStatuses = issueBoardStatusValues()
+        val currentIndex = boardStatuses.indexOf(issue.status).takeIf { it >= 0 } ?: return
+        val targetIndex = (currentIndex + direction).coerceIn(0, boardStatuses.lastIndex)
         if (targetIndex == currentIndex) return
-        val targetStatus = Models.STATUS_VALUES[targetIndex]
+        val targetStatus = boardStatuses[targetIndex]
         movingBoardIssueId = issue.id
         batchMessage = null
         scope.launch {
@@ -6425,7 +6455,7 @@ private fun PilotIssueBoard(
             .padding(top = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(Models.STATUS_VALUES) { status ->
+        items(issueBoardStatusValues()) { status ->
             val bucket = grouped[status].orEmpty()
             Surface(
                 modifier = Modifier
@@ -8764,6 +8794,10 @@ private fun IssueCommentCard(
     authorName: String,
     authorAvatarUrl: String = "",
     authorAgentStatus: String? = null,
+    members: List<Models.Member> = emptyList(),
+    agents: List<Models.Agent> = emptyList(),
+    currentUser: Models.User? = null,
+    onIssueReferenceClick: ((String) -> Unit)? = null,
     expandedActions: Boolean,
     contentExpanded: Boolean,
     highlighted: Boolean,
@@ -8851,7 +8885,13 @@ private fun IssueCommentCard(
                             color = MulticaColors.Muted,
                         )
                     } else {
-                        MarkdownBlock(renderedContent)
+                        MarkdownBlock(
+                            renderedContent,
+                            members = members,
+                            agents = agents,
+                            currentUser = currentUser,
+                            onIssueReferenceClick = onIssueReferenceClick,
+                        )
                         if (collapseContent) {
                             MulticaPillButton(
                                 text = if (contentExpanded) {
@@ -9199,6 +9239,7 @@ private fun PilotIssueDetail(
     var confirmingDeleteIssue by remember(issueId) { mutableStateOf(false) }
     var deletingIssue by remember(issueId) { mutableStateOf(false) }
     var issueMutationMessage by remember(issueId) { mutableStateOf<String?>(null) }
+    var issueReferenceMessage by remember(issueId) { mutableStateOf<String?>(null) }
     var updatingIssueField by remember(issueId) { mutableStateOf<String?>(null) }
     var copyLinkMessage by remember(issueId) { mutableStateOf<String?>(null) }
     var issueMoreMenuOpen by remember(issueId) { mutableStateOf(false) }
@@ -9345,6 +9386,35 @@ private fun PilotIssueDetail(
                         timelineMessage = if (zh) "加载更早时间线失败：${error.message}" else "Load older timeline failed: ${error.message}"
                     }
                     loadingOlderTimeline = false
+                }
+            }
+
+            fun openIssueReference(identifier: String) {
+                if (identifier.equals(data.issue.identifier, ignoreCase = true)) return
+                issueReferenceMessage = null
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { api.searchIssues(workspaceId, identifier, 10) }
+                    }
+                    result.onSuccess { issues ->
+                        val match = issues.firstOrNull { it.identifier.equals(identifier, ignoreCase = true) }
+                            ?: issues.firstOrNull()
+                        if (match == null) {
+                            issueReferenceMessage = if (zh) {
+                                "未找到 Issue $identifier"
+                            } else {
+                                "Issue $identifier was not found"
+                            }
+                        } else {
+                            onOpenIssue(match.id)
+                        }
+                    }.onFailure { error ->
+                        issueReferenceMessage = if (zh) {
+                            "打开 Issue $identifier 失败：${error.message ?: error.toString()}"
+                        } else {
+                            "Open Issue $identifier failed: ${error.message ?: error.toString()}"
+                        }
+                    }
                 }
             }
 
@@ -9805,9 +9875,24 @@ private fun PilotIssueDetail(
                         )
                     }
                 }
+                if (!issueReferenceMessage.isNullOrBlank()) {
+                    item {
+                        PilotInlineResultState(
+                            message = issueReferenceMessage.orEmpty(),
+                            isError = pilotInlineResultIsError(issueReferenceMessage.orEmpty()),
+                            contentDescription = "Issue Detail Reference Link Result Web Banner",
+                        )
+                    }
+                }
                 if (!data.issue.description.isNullOrBlank()) {
                     item {
-                        MarkdownBlock(data.issue.description)
+                        MarkdownBlock(
+                            data.issue.description,
+                            members = data.members,
+                            agents = data.agents,
+                            currentUser = currentUser,
+                            onIssueReferenceClick = { openIssueReference(it) },
+                        )
                     }
                 }
                 if (data.activeTasks.isNotEmpty() || data.runs.isNotEmpty()) {
@@ -9949,6 +10034,10 @@ private fun PilotIssueDetail(
                         authorName = authorName,
                         authorAvatarUrl = authorAvatarUrl,
                         authorAgentStatus = commentAuthorAgentStatus(comment, data.agents),
+                        members = data.members,
+                        agents = data.agents,
+                        currentUser = currentUser,
+                        onIssueReferenceClick = { openIssueReference(it) },
                         expandedActions = expandedCommentActionsId == comment.id,
                         contentExpanded = comment.id in expandedCommentContentIds,
                         highlighted = comment.id == highlightCommentId,
@@ -11354,10 +11443,38 @@ private fun PilotAgentTranscriptPreview() {
 }
 
 @Composable
-private fun MarkdownBlock(markdown: String) {
+private fun MarkdownBlock(
+    markdown: String,
+    members: List<Models.Member> = emptyList(),
+    agents: List<Models.Agent> = emptyList(),
+    currentUser: Models.User? = null,
+    onIssueReferenceClick: ((String) -> Unit)? = null,
+) {
     val textColor = MulticaColors.Text.toArgb()
     val mutedColor = MulticaColors.Muted.toArgb()
     val borderColor = MulticaColors.Border.toArgb()
+    val linkHandler = remember(members, agents, currentUser, onIssueReferenceClick) {
+        object : MarkdownRenderer.LinkHandler {
+            override fun resolveMentionLabel(
+                mentionType: String,
+                mentionId: String,
+                fallbackLabel: String,
+            ): String {
+                return IssueCommentRichText.mentionDisplayLabel(
+                    mentionType,
+                    mentionId,
+                    fallbackLabel,
+                    members,
+                    agents,
+                    currentUser,
+                )
+            }
+
+            override fun openIssueIdentifier(identifier: String) {
+                if (identifier.isNotBlank()) onIssueReferenceClick?.invoke(identifier)
+            }
+        }
+    }
     SelectionContainer(
         modifier = Modifier
             .fillMaxWidth()
@@ -11377,6 +11494,7 @@ private fun MarkdownBlock(markdown: String) {
                     textColor,
                     mutedColor,
                     borderColor,
+                    linkHandler,
                 )
             },
         )

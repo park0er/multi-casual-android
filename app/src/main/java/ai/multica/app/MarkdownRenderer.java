@@ -6,8 +6,12 @@ import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
+import android.text.TextPaint;
+import android.text.style.ClickableSpan;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.text.style.TypefaceSpan;
+import android.text.style.UnderlineSpan;
 import android.view.ViewGroup;
 import android.view.View;
 import android.widget.HorizontalScrollView;
@@ -21,6 +25,13 @@ import java.util.List;
 
 final class MarkdownRenderer {
     private MarkdownRenderer() {}
+
+    private static final int LINK_BLUE = 0xFF007AFF;
+
+    interface LinkHandler {
+        String resolveMentionLabel(String mentionType, String mentionId, String fallbackLabel);
+        void openIssueIdentifier(String identifier);
+    }
 
     static final class Palette {
         final int blockBackground;
@@ -43,6 +54,11 @@ final class MarkdownRenderer {
     }
 
     static void render(Context context, LinearLayout parent, String markdown, int textColor, int mutedColor, int borderColor) {
+        render(context, parent, markdown, textColor, mutedColor, borderColor, null);
+    }
+
+    static void render(Context context, LinearLayout parent, String markdown, int textColor, int mutedColor, int borderColor,
+                       LinkHandler linkHandler) {
         parent.removeAllViews();
         Palette palette = paletteFor(textColor, mutedColor, borderColor);
         if (markdown == null || markdown.trim().isEmpty()) {
@@ -59,7 +75,7 @@ final class MarkdownRenderer {
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
             if (line.trim().startsWith("```")) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 if (inCode) {
                     addCodeBlock(context, parent, code.toString(), mutedColor, palette);
                     code.setLength(0);
@@ -75,7 +91,7 @@ final class MarkdownRenderer {
             }
 
             if (isTableStart(lines, i)) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 List<String> table = new ArrayList<>();
                 table.add(lines[i]);
                 i += 2;
@@ -84,35 +100,37 @@ final class MarkdownRenderer {
                     i++;
                 }
                 i--;
-                addTable(context, parent, table, textColor, mutedColor, borderColor, palette);
+                addTable(context, parent, table, textColor, mutedColor, borderColor, palette, linkHandler);
                 continue;
             }
 
             String trimmed = line.trim();
             if (trimmed.isEmpty()) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
             } else if (trimmed.matches("^(-{3,}|\\*{3,}|_{3,})$")) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 addDivider(context, parent, borderColor);
             } else if (trimmed.startsWith("#")) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 addHeading(context, parent, trimmed, textColor);
             } else if (trimmed.startsWith(">")) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 TextView quote = text(context, trimmed.replaceFirst("^>\\s?", ""), 15, mutedColor);
                 quote.setPadding(dp(context, 10), dp(context, 6), dp(context, 8), dp(context, 6));
                 quote.setBackgroundColor(palette.blockBackground);
                 parent.addView(quote);
             } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-                flushParagraph(context, parent, paragraph, textColor);
+                flushParagraph(context, parent, paragraph, textColor, linkHandler);
                 TextView bullet = text(context, "• " + trimmed.substring(2), 15, textColor);
+                bullet.setText(applyInline(bullet.getText().toString(), linkHandler));
+                bullet.setMovementMethod(LinkMovementMethod.getInstance());
                 bullet.setPadding(dp(context, 8), dp(context, 2), 0, dp(context, 2));
                 parent.addView(bullet);
             } else {
                 paragraph.add(line);
             }
         }
-        flushParagraph(context, parent, paragraph, textColor);
+        flushParagraph(context, parent, paragraph, textColor, linkHandler);
         if (code.length() > 0) addCodeBlock(context, parent, code.toString(), mutedColor, palette);
     }
 
@@ -124,10 +142,11 @@ final class MarkdownRenderer {
                 && divider.matches("^\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)+\\|?$");
     }
 
-    private static void flushParagraph(Context context, LinearLayout parent, List<String> paragraph, int textColor) {
+    private static void flushParagraph(Context context, LinearLayout parent, List<String> paragraph, int textColor,
+                                       LinkHandler linkHandler) {
         if (paragraph.isEmpty()) return;
         TextView p = text(context, String.join("\n", paragraph), 15, textColor);
-        p.setText(applyInline(p.getText().toString()));
+        p.setText(applyInline(p.getText().toString(), linkHandler));
         p.setMovementMethod(LinkMovementMethod.getInstance());
         p.setPadding(0, dp(context, 2), 0, dp(context, 6));
         parent.addView(p);
@@ -160,7 +179,8 @@ final class MarkdownRenderer {
         parent.addView(line, params);
     }
 
-    private static void addTable(Context context, LinearLayout parent, List<String> lines, int textColor, int mutedColor, int borderColor, Palette palette) {
+    private static void addTable(Context context, LinearLayout parent, List<String> lines, int textColor, int mutedColor, int borderColor,
+                                 Palette palette, LinkHandler linkHandler) {
         HorizontalScrollView scroll = new HorizontalScrollView(context);
         TableLayout table = new TableLayout(context);
         table.setShrinkAllColumns(false);
@@ -172,7 +192,8 @@ final class MarkdownRenderer {
             for (String cell : cells) {
                 String cellText = cell.trim();
                 TextView tv = text(context, "", 14, r == 0 ? textColor : mutedColor);
-                tv.setText(applyInline(cellText));
+                tv.setText(applyInline(cellText, linkHandler));
+                tv.setMovementMethod(LinkMovementMethod.getInstance());
                 tv.setTypeface(r == 0 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
                 tv.setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8));
                 tv.setBackgroundColor(r == 0 ? palette.tableHeaderBackground : palette.tableCellBackground);
@@ -253,7 +274,11 @@ final class MarkdownRenderer {
         return tv;
     }
 
-    private static SpannableStringBuilder applyInline(String value) {
+    static SpannableStringBuilder applyInline(String value) {
+        return applyInline(value, null);
+    }
+
+    private static SpannableStringBuilder applyInline(String value, LinkHandler linkHandler) {
         SpannableStringBuilder out = new SpannableStringBuilder();
         int i = 0;
         while (i < value.length()) {
@@ -277,10 +302,106 @@ final class MarkdownRenderer {
                     continue;
                 }
             }
+            if (value.charAt(i) == '[') {
+                ParsedMarkdownLink link = parseMarkdownLink(value, i);
+                if (link != null) {
+                    appendMarkdownLink(out, link, linkHandler);
+                    i = link.end;
+                    continue;
+                }
+            }
+            int issueIdentifierEnd = IssueCommentRichText.issueIdentifierEndAt(value, i);
+            if (issueIdentifierEnd > i) {
+                appendIssueIdentifier(out, value.substring(i, issueIdentifierEnd), linkHandler);
+                i = issueIdentifierEnd;
+                continue;
+            }
             out.append(value.charAt(i));
             i++;
         }
         return out;
+    }
+
+    private static void appendMarkdownLink(SpannableStringBuilder out, ParsedMarkdownLink link, LinkHandler linkHandler) {
+        MentionUri mention = MentionUri.parse(link.url);
+        if (mention != null) {
+            String label = linkHandler == null
+                    ? IssueCommentRichText.mentionDisplayLabel(mention.type, mention.id, link.label, new ArrayList<>(), new ArrayList<>(), null)
+                    : linkHandler.resolveMentionLabel(mention.type, mention.id, link.label);
+            appendLinkedText(out, label == null ? link.label : label, null);
+            return;
+        }
+        appendLinkedText(out, link.label, null);
+    }
+
+    private static void appendIssueIdentifier(SpannableStringBuilder out, String identifier, LinkHandler linkHandler) {
+        appendLinkedText(out, identifier, view -> {
+            if (linkHandler != null) linkHandler.openIssueIdentifier(identifier);
+        });
+    }
+
+    private static void appendLinkedText(SpannableStringBuilder out, String text, View.OnClickListener onClick) {
+        int start = out.length();
+        out.append(text == null ? "" : text);
+        int end = out.length();
+        if (end <= start) return;
+        out.setSpan(new ForegroundColorSpan(LINK_BLUE), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.setSpan(new UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (onClick != null) {
+            out.setSpan(new ClickableSpan() {
+                @Override
+                public void onClick(View widget) {
+                    onClick.onClick(widget);
+                }
+
+                @Override
+                public void updateDrawState(TextPaint ds) {
+                    super.updateDrawState(ds);
+                    ds.setColor(LINK_BLUE);
+                    ds.setUnderlineText(true);
+                }
+            }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+    }
+
+    private static ParsedMarkdownLink parseMarkdownLink(String value, int start) {
+        int labelEnd = value.indexOf("](", start + 1);
+        if (labelEnd <= start + 1) return null;
+        int urlEnd = value.indexOf(')', labelEnd + 2);
+        if (urlEnd <= labelEnd + 2) return null;
+        String label = value.substring(start + 1, labelEnd);
+        String url = value.substring(labelEnd + 2, urlEnd);
+        return new ParsedMarkdownLink(label, url, urlEnd + 1);
+    }
+
+    private static final class ParsedMarkdownLink {
+        final String label;
+        final String url;
+        final int end;
+
+        ParsedMarkdownLink(String label, String url, int end) {
+            this.label = label;
+            this.url = url;
+            this.end = end;
+        }
+    }
+
+    private static final class MentionUri {
+        final String type;
+        final String id;
+
+        private MentionUri(String type, String id) {
+            this.type = type;
+            this.id = id;
+        }
+
+        static MentionUri parse(String url) {
+            if (url == null || !url.startsWith("mention://")) return null;
+            String path = url.substring("mention://".length());
+            int slash = path.indexOf('/');
+            if (slash <= 0 || slash >= path.length() - 1) return null;
+            return new MentionUri(path.substring(0, slash), path.substring(slash + 1));
+        }
     }
 
     static int dp(Context context, int value) {
