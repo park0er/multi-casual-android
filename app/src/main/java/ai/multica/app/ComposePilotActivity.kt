@@ -67,6 +67,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
@@ -7565,8 +7566,6 @@ private fun IssueDetailHeroCard(
     zh: Boolean,
     onStatusChange: (String) -> Unit,
     onPriorityChange: (String) -> Unit,
-    onEdit: () -> Unit,
-    onCopyLink: () -> Unit,
 ) {
     Surface(
         modifier = Modifier
@@ -7588,20 +7587,6 @@ private fun IssueDetailHeroCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MulticaColors.AccentSoft.copy(alpha = 0.38f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = issue.identifier.takeLastWhile { it.isDigit() }.take(2).ifBlank { issue.identifier.take(2) },
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold),
-                        color = MulticaColors.Accent,
-                        maxLines = 1,
-                    )
-                }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = issue.identifier,
@@ -7614,9 +7599,9 @@ private fun IssueDetailHeroCard(
                         Text(
                             text = issue.title,
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 22.sp,
-                                lineHeight = 27.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 20.sp,
+                                lineHeight = 24.sp,
                             ),
                             color = MulticaColors.Text,
                             maxLines = 3,
@@ -7624,18 +7609,6 @@ private fun IssueDetailHeroCard(
                         )
                     }
                 }
-                MulticaIconPillButton(
-                    icon = Icons.Outlined.ContentCopy,
-                    contentDescription = "Issue Detail Hero Copy Link",
-                    onClick = onCopyLink,
-                    tone = MulticaButtonTone.Ghost,
-                )
-                MulticaIconPillButton(
-                    icon = Icons.Outlined.Edit,
-                    contentDescription = "Issue Detail Hero Edit",
-                    onClick = onEdit,
-                    tone = MulticaButtonTone.Ghost,
-                )
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 item {
@@ -7669,58 +7642,125 @@ private fun IssueDetailCompactMetadata(
 ) {
     val labelSummary = issueLabels.joinToString(", ") { it.name }
         .ifBlank { if (zh) "无 Labels" else "No labels" }
-    CompactInfoPanel(
+    val dueValue = issue.dueDate?.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-"
+    val createdValue = issue.createdAt.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-"
+    val updatedValue = issue.updatedAt.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-"
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 10.dp)
+            .padding(top = 2.dp, bottom = 8.dp)
             .semantics(mergeDescendants = false) { contentDescription = "Issue Detail Compact Metadata" },
+        shape = RoundedCornerShape(12.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.82f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(0.75.dp, MulticaColors.Border.copy(alpha = 0.42f)),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            CompactMetaText(
-                label = if (zh) "负责人" else "Assignee",
-                value = assignee.ifBlank { if (zh) "未分配" else "Unassigned" },
-                modifier = Modifier.weight(1f),
-                contentDescription = "Issue Detail Assignee Metadata Row",
-            )
-            CompactMetaText(
-                label = if (zh) "项目" else "Project",
-                value = project,
-                modifier = Modifier.weight(1f),
-                contentDescription = "Issue Detail Project Metadata Row",
-            )
+        Column(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                IssueDetailTinyProperty(
+                    label = if (zh) "负责人" else "Assignee",
+                    value = assignee.ifBlank { if (zh) "未分配" else "Unassigned" },
+                    icon = Icons.Outlined.Person,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Assignee Metadata Row",
+                )
+                IssueDetailTinyProperty(
+                    label = if (zh) "项目" else "Project",
+                    value = project,
+                    icon = Icons.Outlined.Folder,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Project Metadata Row",
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                IssueDetailTinyProperty(
+                    label = if (zh) "优先级" else "Priority",
+                    value = Models.priorityLabel(issue.priority, zh),
+                    icon = Icons.Outlined.Flag,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Priority Due Date Metadata Row",
+                )
+                IssueDetailTinyProperty(
+                    label = if (zh) "到期" else "Due",
+                    value = dueValue,
+                    icon = Icons.Outlined.CalendarMonth,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Due Date Metadata Row",
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                IssueDetailTinyProperty(
+                    label = if (zh) "Labels" else "Labels",
+                    value = labelSummary,
+                    icon = Icons.Outlined.Label,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Labels Metadata Row",
+                )
+                IssueDetailTinyProperty(
+                    label = if (zh) "创建" else "Created",
+                    value = createdValue,
+                    icon = Icons.Outlined.CalendarMonth,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Created Metadata Row",
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                IssueDetailTinyProperty(
+                    label = if (zh) "更新" else "Updated",
+                    value = updatedValue,
+                    icon = Icons.Outlined.CalendarMonth,
+                    modifier = Modifier.weight(1f),
+                    contentDescription = "Issue Detail Updated Metadata Row",
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            CompactMetaText(
-                label = if (zh) "优先级" else "Priority",
-                value = Models.priorityLabel(issue.priority, zh),
-                modifier = Modifier.weight(1f),
-                contentDescription = "Issue Detail Priority Due Date Metadata Row",
+    }
+}
+
+@Composable
+private fun IssueDetailTinyProperty(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    Row(
+        modifier = modifier.then(
+            if (contentDescription == null) Modifier else Modifier.semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription
+            }
+        ),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MulticaColors.TextTertiary,
+            modifier = Modifier
+                .padding(top = 1.dp)
+                .size(13.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp), modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold),
+                color = MulticaColors.TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            CompactMetaText(
-                label = if (zh) "到期" else "Due",
-                value = issue.dueDate?.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-",
-                modifier = Modifier.weight(1f),
-                contentDescription = "Issue Detail Priority Due Date Metadata Row",
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            CompactMetaText(
-                label = if (zh) "Labels" else "Labels",
-                value = labelSummary,
-                modifier = Modifier.weight(1f),
-                contentDescription = "Issue Detail Labels Metadata Row",
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            CompactMetaText(
-                label = if (zh) "创建" else "Created",
-                value = issue.createdAt.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-",
-                modifier = Modifier.weight(1f),
-            )
-            CompactMetaText(
-                label = if (zh) "更新" else "Updated",
-                value = issue.updatedAt.takeIf { it.isNotBlank() }?.let { shortDate(it) } ?: "-",
-                modifier = Modifier.weight(1f),
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
+                color = MulticaColors.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -8508,6 +8548,7 @@ private fun IssueDetailProgressCard(
     subtitle: String?,
     icon: ImageVector,
     tone: MulticaButtonTone,
+    contentDescription: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val tint = when (tone) {
@@ -8523,7 +8564,16 @@ private fun IssueDetailProgressCard(
             .fillMaxWidth()
             .then(clickModifier)
             .clip(shape)
-            .border(0.75.dp, MulticaColors.Border.copy(alpha = 0.52f), shape),
+            .border(0.75.dp, MulticaColors.Border.copy(alpha = 0.52f), shape)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription ?: "Issue Detail Progress Card"
+                if (onClick != null) {
+                    semanticsOnClick(label = title) {
+                        onClick()
+                        true
+                    }
+                }
+            },
         shape = shape,
         color = MulticaColors.Surface.copy(alpha = 0.72f),
     ) {
@@ -9724,8 +9774,6 @@ private fun PilotIssueDetail(
                         zh = zh,
                         onStatusChange = { updateIssueStatusFromDetail(it) },
                         onPriorityChange = { updateIssuePriorityFromDetail(it) },
-                        onEdit = { onEditIssue(data.issue) },
-                        onCopyLink = { copyIssueLink() },
                     )
                 }
                 item {
@@ -9760,73 +9808,30 @@ private fun PilotIssueDetail(
                         MarkdownBlock(data.issue.description)
                     }
                 }
-                item {
-                    SectionHeader(if (zh) "Agent 最新进展" else "Agent Latest Progress")
-                }
-                item {
-                    IssueDetailWebActionRow(
-                        eyebrow = if (zh) "Agent Live" else "Agent live",
-                        title = if (data.activeTasks.isNotEmpty()) {
-                            if (zh) "正在运行的 Agent 任务" else "Active agent task"
-                        } else if (data.runs.isNotEmpty()) {
-                            if (zh) "最近 Agent 运行" else "Latest agent run"
-                        } else {
-                            if (zh) "暂无进展更新" else "No progress updates yet"
-                        },
-                        subtitle = if (data.activeTasks.isNotEmpty()) {
-                            if (zh) "${data.activeTasks.size} 个任务正在运行" else "${data.activeTasks.size} active task(s)"
-                        } else if (data.runs.isNotEmpty()) {
-                            if (zh) "${data.runs.size} 条 Agent 运行记录" else "${data.runs.size} agent run(s)"
-                        } else {
-                            if (zh) "Agent live card 对齐 Web activity header" else "Agent live card aligned with the Web activity header"
-                        },
-                        icon = Icons.Outlined.Bolt,
-                        tone = if (data.activeTasks.isNotEmpty()) MulticaButtonTone.Primary else MulticaButtonTone.Ghost,
-                        contentDescription = "Issue Agent Live Web Summary $WEB_SSOT_EXECUTION_LOG_SECTION",
-                    )
-                }
-                item {
-                    when {
-                        data.activeTasks.isNotEmpty() -> {
-                            val task = data.activeTasks.first()
-                            IssueDetailProgressCard(
-                                title = if (zh) "活跃 Agent 任务" else "Active agent task",
-                                subtitle = listOf(task.status, clean(task.triggerSummary).ifBlank { Models.shortId(task.id) })
+                if (data.activeTasks.isNotEmpty() || data.runs.isNotEmpty()) {
+                    item {
+                        val task = data.activeTasks.firstOrNull()
+                        val run = data.runs.firstOrNull()
+                        IssueDetailProgressCard(
+                            title = if (task != null) {
+                                if (zh) "活跃 Agent 任务" else "Active agent task"
+                            } else {
+                                if (zh) "最近 Agent 运行" else "Latest agent run"
+                            },
+                            subtitle = if (task != null) {
+                                listOf(task.status, clean(task.triggerSummary).ifBlank { Models.shortId(task.id) })
                                     .filter { it.isNotBlank() }
-                                    .joinToString(" · "),
-                                icon = Icons.Outlined.Bolt,
-                                tone = MulticaButtonTone.Primary,
-                            )
-                        }
-                        data.runs.isNotEmpty() -> {
-                            val run = data.runs.first()
-                            IssueDetailProgressCard(
-                                title = if (zh) "最近 Agent 运行" else "Latest agent run",
-                                subtitle = listOf(run.status, shortDate(run.startedAt), clean(run.error))
+                                    .joinToString(" · ")
+                            } else {
+                                listOf(run?.status.orEmpty(), run?.startedAt?.let { shortDate(it) }.orEmpty(), clean(run?.error))
                                     .filter { it.isNotBlank() }
-                                    .joinToString(" · "),
-                                icon = Icons.Outlined.Bolt,
-                                tone = if (run.status == "failed") MulticaButtonTone.Destructive else MulticaButtonTone.Primary,
-                                onClick = { selectedRun = run },
-                            )
-                        }
-                        !data.timeline?.entries.isNullOrEmpty() -> {
-                            val entry = data.timeline!!.entries.first()
-                            IssueDetailProgressCard(
-                                title = clean(entry.action).ifBlank { if (zh) "最近活动" else "Latest activity" },
-                                subtitle = clean(entry.content).ifBlank { shortDate(entry.createdAt) },
-                                icon = Icons.Outlined.CalendarMonth,
-                                tone = MulticaButtonTone.Ghost,
-                            )
-                        }
-                        else -> {
-                            IssueDetailProgressCard(
-                                title = if (zh) "暂无进展更新" else "No progress updates yet",
-                                subtitle = if (zh) "Agent 运行、评论和活动会优先显示在这里" else "Agent runs, comments, and activity will surface here first",
-                                icon = Icons.Outlined.RadioButtonUnchecked,
-                                tone = MulticaButtonTone.Ghost,
-                            )
-                        }
+                                    .joinToString(" · ")
+                            },
+                            icon = Icons.Outlined.Bolt,
+                            tone = if (task != null || run?.status != "failed") MulticaButtonTone.Primary else MulticaButtonTone.Destructive,
+                            contentDescription = "Issue Agent Progress Compact Row $WEB_SSOT_EXECUTION_LOG_SECTION",
+                            onClick = if (run != null) ({ selectedRun = run }) else null,
+                        )
                     }
                 }
                 item {
@@ -10795,12 +10800,6 @@ private fun IssueCommentInputBar(
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MulticaColors.Border)
-            )
             if (pendingAttachments.isNotEmpty()) {
                 Text(
                     text = if (zh) {
@@ -10830,17 +10829,21 @@ private fun IssueCommentInputBar(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    MulticaPillButton(
-                        text = if (uploadingAttachment) "..." else if (zh) "图" else "Img",
+                    MulticaIconPillButton(
+                        icon = Icons.Outlined.Image,
+                        contentDescription = "Issue Comment Attach Image",
                         onClick = onAttachImage,
                         tone = MulticaButtonTone.Secondary,
-                        contentDescription = "Issue Comment Attach Image",
+                        enabled = !uploadingAttachment,
+                        modifier = Modifier.size(38.dp),
                     )
-                    MulticaPillButton(
-                        text = "+",
+                    MulticaIconPillButton(
+                        icon = Icons.Outlined.Add,
+                        contentDescription = "Issue Comment Attach",
                         onClick = onAttach,
                         tone = MulticaButtonTone.Ghost,
-                        contentDescription = "Issue Comment Attach",
+                        enabled = !uploadingAttachment,
+                        modifier = Modifier.size(38.dp),
                     )
                     MulticaPillButton(
                         text = "@",
@@ -10852,7 +10855,9 @@ private fun IssueCommentInputBar(
                         value = draft,
                         onValueChange = onDraftChange,
                         modifier = Modifier.weight(1f),
-                        label = if (zh) "评论" else "Comment",
+                        label = "",
+                        placeholder = if (zh) "评论" else "Comment",
+                        showLabel = false,
                         contentDescription = "Issue Comment Input",
                         minLines = 1,
                         maxLines = 4,
