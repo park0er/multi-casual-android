@@ -49,10 +49,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
@@ -8963,7 +8965,7 @@ private fun CommentAttachmentWebDenseRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = Icons.Outlined.Link,
+                imageVector = Icons.Outlined.AttachFile,
                 contentDescription = null,
                 tint = MulticaColors.Muted,
                 modifier = Modifier.size(16.dp),
@@ -9035,7 +9037,7 @@ private fun IssueAttachmentWebDenseRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = Icons.Outlined.Link,
+                imageVector = Icons.Outlined.AttachFile,
                 contentDescription = null,
                 tint = MulticaColors.Muted,
                 modifier = Modifier.size(16.dp),
@@ -10382,7 +10384,7 @@ private fun PilotIssueDetail(
                     MulticaCupertinoActionSheetItem(
                         title = if (zh) "上传附件" else "Upload attachment",
                         subtitle = if (zh) "从设备选择文件并附加到这个 Issue" else "Choose a file from this device",
-                        icon = Icons.Outlined.Folder,
+                        icon = Icons.Outlined.AttachFile,
                         contentDescription = "Issue Detail More Actions Sheet Issue Detail More Upload Attachment Action",
                         enabled = !uploadingAttachment,
                         onClick = {
@@ -10814,6 +10816,7 @@ private fun IssueCommentInputBar(
                 )
             }
             // Issue Comment Cupertino Composer mirrors Web comment-input.tsx's rounded editor surface.
+            val composerActionModifier = Modifier.size(38.dp)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
@@ -10835,21 +10838,22 @@ private fun IssueCommentInputBar(
                         onClick = onAttachImage,
                         tone = MulticaButtonTone.Secondary,
                         enabled = !uploadingAttachment,
-                        modifier = Modifier.size(38.dp),
+                        modifier = composerActionModifier,
                     )
                     MulticaIconPillButton(
-                        icon = Icons.Outlined.Add,
+                        icon = Icons.Outlined.AttachFile,
                         contentDescription = "Issue Comment Attach",
                         onClick = onAttach,
-                        tone = MulticaButtonTone.Ghost,
+                        tone = MulticaButtonTone.Secondary,
                         enabled = !uploadingAttachment,
-                        modifier = Modifier.size(38.dp),
+                        modifier = composerActionModifier,
                     )
-                    MulticaPillButton(
-                        text = "@",
+                    MulticaIconPillButton(
+                        icon = Icons.Outlined.AlternateEmail,
+                        contentDescription = "Issue Comment Agent Mention",
                         onClick = { mentionPickerOpen = !mentionPickerOpen },
                         tone = if (mentionPickerOpen) MulticaButtonTone.Primary else MulticaButtonTone.Secondary,
-                        contentDescription = "Issue Comment Agent Mention",
+                        modifier = composerActionModifier,
                     )
                     MulticaTextField(
                         value = draft,
