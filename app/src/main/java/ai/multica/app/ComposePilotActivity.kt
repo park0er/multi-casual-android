@@ -8797,6 +8797,7 @@ private fun IssueCommentCard(
     members: List<Models.Member> = emptyList(),
     agents: List<Models.Agent> = emptyList(),
     currentUser: Models.User? = null,
+    onIssueIdClick: ((String) -> Unit)? = null,
     onIssueReferenceClick: ((String) -> Unit)? = null,
     expandedActions: Boolean,
     contentExpanded: Boolean,
@@ -8890,6 +8891,7 @@ private fun IssueCommentCard(
                             members = members,
                             agents = agents,
                             currentUser = currentUser,
+                            onIssueIdClick = onIssueIdClick,
                             onIssueReferenceClick = onIssueReferenceClick,
                         )
                         if (collapseContent) {
@@ -9891,6 +9893,7 @@ private fun PilotIssueDetail(
                             members = data.members,
                             agents = data.agents,
                             currentUser = currentUser,
+                            onIssueIdClick = { onOpenIssue(it) },
                             onIssueReferenceClick = { openIssueReference(it) },
                         )
                     }
@@ -10037,6 +10040,7 @@ private fun PilotIssueDetail(
                         members = data.members,
                         agents = data.agents,
                         currentUser = currentUser,
+                        onIssueIdClick = { onOpenIssue(it) },
                         onIssueReferenceClick = { openIssueReference(it) },
                         expandedActions = expandedCommentActionsId == comment.id,
                         contentExpanded = comment.id in expandedCommentContentIds,
@@ -11448,12 +11452,13 @@ private fun MarkdownBlock(
     members: List<Models.Member> = emptyList(),
     agents: List<Models.Agent> = emptyList(),
     currentUser: Models.User? = null,
+    onIssueIdClick: ((String) -> Unit)? = null,
     onIssueReferenceClick: ((String) -> Unit)? = null,
 ) {
     val textColor = MulticaColors.Text.toArgb()
     val mutedColor = MulticaColors.Muted.toArgb()
     val borderColor = MulticaColors.Border.toArgb()
-    val linkHandler = remember(members, agents, currentUser, onIssueReferenceClick) {
+    val linkHandler = remember(members, agents, currentUser, onIssueIdClick, onIssueReferenceClick) {
         object : MarkdownRenderer.LinkHandler {
             override fun resolveMentionLabel(
                 mentionType: String,
@@ -11468,6 +11473,10 @@ private fun MarkdownBlock(
                     agents,
                     currentUser,
                 )
+            }
+
+            override fun openIssueId(issueId: String) {
+                if (issueId.isNotBlank()) onIssueIdClick?.invoke(issueId)
             }
 
             override fun openIssueIdentifier(identifier: String) {
