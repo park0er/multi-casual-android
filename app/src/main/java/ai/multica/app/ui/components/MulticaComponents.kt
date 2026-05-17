@@ -1596,6 +1596,8 @@ fun MulticaCupertinoTextField(
     label: String,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    placeholder: String = label,
+    showLabel: Boolean = true,
     enabled: Boolean = true,
     singleLine: Boolean = false,
     minLines: Int = 1,
@@ -1609,13 +1611,15 @@ fun MulticaCupertinoTextField(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
-            color = MulticaColors.TextTertiary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (showLabel && label.isNotBlank()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
+                color = MulticaColors.TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         CupertinoBorderedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -1624,7 +1628,11 @@ fun MulticaCupertinoTextField(
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
-            placeholder = { Text(label, color = MulticaColors.TextTertiary) },
+            placeholder = {
+                if (placeholder.isNotBlank()) {
+                    Text(placeholder, color = MulticaColors.TextTertiary)
+                }
+            },
             textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 21.sp, color = MulticaColors.TextPrimary),
             shape = RoundedCornerShape(10.dp),
         )
@@ -1639,6 +1647,8 @@ fun MulticaTextField(
     label: String,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    placeholder: String = label,
+    showLabel: Boolean = true,
     enabled: Boolean = true,
     singleLine: Boolean = false,
     minLines: Int = 1,
@@ -1650,6 +1660,8 @@ fun MulticaTextField(
         label = label,
         modifier = modifier,
         contentDescription = contentDescription,
+        placeholder = placeholder,
+        showLabel = showLabel,
         enabled = enabled,
         singleLine = singleLine,
         minLines = minLines,
