@@ -2749,23 +2749,6 @@ private fun PilotInboxRow(
                     .padding(vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MulticaColors.AccentSoft.copy(alpha = if (!item.read) 0.46f else 0.18f))
-                        .semantics { contentDescription = "Inbox Actor Avatar ${item.id}" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = inboxAvatarText(item),
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, lineHeight = 12.sp),
-                        color = if (!item.read) MulticaColors.Accent else MulticaColors.Muted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                    )
-                }
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2866,11 +2849,6 @@ private fun inboxDetailLabel(item: Models.InboxItem, zh: Boolean): String {
         clean(item.type).replace('_', ' ').takeIf { it.isNotBlank() },
         clean(item.issueStatus).takeIf { it.isNotBlank() }?.let { Models.statusLabel(it, zh) },
     ).joinToString(" · ").ifBlank { Models.statusLabel(item.issueStatus, zh).ifBlank { if (zh) "通知" else "Notification" } }
-}
-
-private fun inboxAvatarText(item: Models.InboxItem): String {
-    val source = clean(item.issueIdentifier).ifBlank { clean(item.type) }.ifBlank { "M" }
-    return source.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "M"
 }
 
 @Composable
