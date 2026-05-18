@@ -4,6 +4,7 @@ plugins {
     id "org.jetbrains.kotlin.plugin.compose"
 }
 
+
 android {
     namespace "ai.multica.app"
     compileSdk 36
@@ -44,6 +45,12 @@ android {
             buildConfigField "String", "MULTICA_WEB_BASE_URL", "\"https://app.multica.ai\""
             buildConfigField "String", "MULTICA_WS_BASE_URL", "\"wss://api.multica.ai\""
             buildConfigField "String", "MULTICA_AUTH_PREFS_NAME", "\"multica_auth\""
+        }
+    }
+
+    buildTypes {
+        release {
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 }

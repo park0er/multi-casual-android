@@ -359,8 +359,10 @@ private data class InboxIssueContext(
 
 private data class PilotIssueDetailData(
     val issue: Models.Issue,
+    val parentIssue: Models.Issue?,
     val comments: List<Models.Comment>,
     val runs: List<Models.AgentTask>,
+    val projects: List<Models.Project>,
     val members: List<Models.Member>,
     val agents: List<Models.Agent>,
     val issueLabels: List<Models.IssueLabel>,
@@ -1591,6 +1593,7 @@ private fun ComposePilotShell(
         chatSession != null ||
         settingsPage != null
 
+
     BackHandler(enabled = secondaryScreenOpen) {
         when {
             issueFormOpen -> {
@@ -1970,6 +1973,7 @@ private fun PilotTabContent(
         )
     }
 }
+
 
 @Composable
 private fun PilotSearchPage(
@@ -7570,6 +7574,68 @@ private fun IssueDetailPriorityMenu(
 }
 
 @Composable
+private fun IssueDetailParentIssueLink(
+    parentIssue: Models.Issue,
+    zh: Boolean,
+    onOpen: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onOpen)
+            .semantics { contentDescription = "Issue Detail Parent Issue Link" },
+        shape = RoundedCornerShape(14.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.86f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(0.75.dp, MulticaColors.Border.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = issueStatusIcon(parentIssue.status),
+                contentDescription = null,
+                tint = MulticaColors.Accent,
+                modifier = Modifier.size(17.dp),
+            )
+            Text(
+                text = if (zh) "子 Issue of" else "Sub-issue of",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = MulticaTypeScale.Caption,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MulticaColors.Muted,
+                maxLines = 1,
+            )
+            Text(
+                text = listOf(parentIssue.identifier, parentIssue.title).filter { it.isNotBlank() }.joinToString(" "),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = MulticaTypeScale.Body,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MulticaColors.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MulticaColors.Muted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun IssueDetailHeroCard(
     issue: Models.Issue,
     updatingField: String?,
@@ -8869,6 +8935,7 @@ private fun IssueCommentCard(
                             members = members,
                             agents = agents,
                             currentUser = currentUser,
+                            attachments = comment.attachments,
                             onIssueIdClick = onIssueIdClick,
                             onIssueReferenceClick = onIssueReferenceClick,
                         )
@@ -9270,7 +9337,9 @@ private fun PilotIssueDetail(
                         return api.agentRuns(requestedIssueId, requestedWorkspaceId)
                     }
 
-                    override fun projects(): List<Models.Project> = emptyList()
+                    override fun projects(): List<Models.Project> = runCatching {
+                        api.projects(workspaceId, 100, 0).items
+                    }.getOrElse { emptyList() }
 
                     override fun members(): List<Models.Member> = api.members(workspaceId)
 
@@ -9283,11 +9352,13 @@ private fun PilotIssueDetail(
             return@LaunchedEffect
         }
         val initialData = PilotIssueDetailData(
-            core.issue,
-            core.comments,
-            core.runs,
-            core.members,
-            core.agents,
+            issue = core.issue,
+            parentIssue = null,
+            comments = core.comments,
+            runs = core.runs,
+            projects = core.projects,
+            members = core.members,
+            agents = core.agents,
             issueLabels = emptyList(),
             allLabels = emptyList(),
             subscribers = emptyList(),
@@ -9304,11 +9375,23 @@ private fun PilotIssueDetail(
             val subscribers = runCatching { api.issueSubscribers(workspaceId, issueId) }.getOrElse { emptyList() }
             val attachments = runCatching { api.issueAttachments(workspaceId, issueId) }.getOrElse { emptyList() }
             val children = runCatching { api.childIssues(workspaceId, issueId) }.getOrElse { emptyList() }
+            val parentIssue = core.issue.parentIssueId?.takeIf { it.isNotBlank() }?.let { parentIssueId ->
+                runCatching { api.issue(parentIssueId, workspaceId) }.getOrNull()
+            }
+            val projectId = core.issue.projectId?.takeIf { it.isNotBlank() }
+            val projects = if (projectId != null && core.projects.none { it.id == projectId }) {
+                val issueProject = runCatching { api.project(workspaceId, projectId) }.getOrNull()
+                if (issueProject != null) core.projects + issueProject else core.projects
+            } else {
+                core.projects
+            }
             val usage = runCatching { api.issueUsage(workspaceId, issueId) }.getOrNull()
             val timelineAnchor = highlightCommentId ?: core.comments.lastOrNull()?.id
             val timeline = runCatching { api.issueTimeline(workspaceId, issueId, 10, null, null, timelineAnchor) }.getOrNull()
             val activeTasks = runCatching { api.activeIssueTasks(workspaceId, issueId) }.getOrElse { emptyList() }
             initialData.copy(
+                parentIssue = parentIssue,
+                projects = projects,
                 issueLabels = issueLabels,
                 allLabels = allLabels,
                 subscribers = subscribers,
@@ -9761,6 +9844,10 @@ private fun PilotIssueDetail(
             val WEB_SSOT_EXECUTION_LOG_SECTION = "/Users/park0er/coding/multica-web-source/packages/views/issues/components/execution-log-section.tsx"
             val WEB_SSOT_PULL_REQUEST_LIST = "/Users/park0er/coding/multica-web-source/packages/views/issues/components/pull-request-list.tsx"
             val WEB_SSOT_TERMINATE_TASK_CONFIRM_DIALOG = "/Users/park0er/coding/multica-web-source/packages/views/issues/components/terminate-task-confirm-dialog.tsx"
+            val projectName = data.projects.firstOrNull { it.id == data.issue.projectId }?.name
+                ?.takeIf { it.isNotBlank() }
+                ?: data.issue.projectId?.takeIf { it.isNotBlank() }?.let { Models.shortId(it) }
+                ?: if (zh) "无项目" else "No project"
 
             PilotListPage(
                 title = "${data.issue.identifier} · ${Models.statusLabel(data.issue.status, zh)}",
@@ -9819,6 +9906,15 @@ private fun PilotIssueDetail(
                     }
                 },
             ) {
+                data.parentIssue?.let { parentIssue ->
+                    item {
+                        IssueDetailParentIssueLink(
+                            parentIssue = parentIssue,
+                            zh = zh,
+                            onOpen = { onOpenIssue(parentIssue.id) },
+                        )
+                    }
+                }
                 item {
                     IssueDetailHeroCard(
                         issue = data.issue,
@@ -9833,7 +9929,7 @@ private fun PilotIssueDetail(
                         issue = data.issue,
                         issueLabels = data.issueLabels,
                         assignee = Models.issueAssigneeDisplayName(data.issue, data.members, data.agents, currentUser),
-                        project = data.issue.projectId?.let { Models.shortId(it) } ?: if (zh) "无项目" else "No project",
+                        project = projectName,
                         zh = zh,
                     )
                 }
@@ -9871,6 +9967,7 @@ private fun PilotIssueDetail(
                             members = data.members,
                             agents = data.agents,
                             currentUser = currentUser,
+                            attachments = data.attachments,
                             onIssueIdClick = { onOpenIssue(it) },
                             onIssueReferenceClick = { openIssueReference(it) },
                         )
@@ -11430,6 +11527,7 @@ private fun MarkdownBlock(
     members: List<Models.Member> = emptyList(),
     agents: List<Models.Agent> = emptyList(),
     currentUser: Models.User? = null,
+    attachments: List<Models.Attachment> = emptyList(),
     onIssueIdClick: ((String) -> Unit)? = null,
     onIssueReferenceClick: ((String) -> Unit)? = null,
 ) {
@@ -11462,29 +11560,174 @@ private fun MarkdownBlock(
             }
         }
     }
-    SelectionContainer(
+    val segments = remember(markdown, attachments) { parseMarkdownImageSegments(markdown, attachments) }
+    val markdownContext = LocalContext.current
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = "Selectable Markdown Block" },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        AndroidView(
-            modifier = Modifier.fillMaxWidth(),
-            factory = { context ->
-                LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            },
-            update = { view ->
-                view.removeAllViews()
-                MarkdownRenderer.render(
-                    view.context,
-                    view,
-                    markdown,
-                    textColor,
-                    mutedColor,
-                    borderColor,
-                    linkHandler,
-                )
-            },
+        segments.forEach { segment ->
+            when (segment) {
+                is MarkdownTextSegment -> {
+                    SelectionContainer {
+                        AndroidView(
+                            modifier = Modifier.fillMaxWidth(),
+                            factory = { context ->
+                                LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+                            },
+                            update = { view ->
+                                view.removeAllViews()
+                                MarkdownRenderer.render(
+                                    view.context,
+                                    view,
+                                    segment.text,
+                                    textColor,
+                                    mutedColor,
+                                    borderColor,
+                                    linkHandler,
+                                )
+                            },
+                        )
+                    }
+                }
+                is MarkdownImageSegment -> {
+                    MulticaMarkdownImage(
+                        image = segment,
+                        onOpen = { url -> openExternalUrl(markdownContext, url) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private sealed interface MarkdownImageAwareSegment
+
+private data class MarkdownTextSegment(val text: String) : MarkdownImageAwareSegment
+
+private data class MarkdownImageSegment(
+    val alt: String,
+    val url: String,
+) : MarkdownImageAwareSegment
+
+private val MARKDOWN_IMAGE_LINE_REGEX = Regex("""^!\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)$""")
+
+private fun parseMarkdownImageSegments(
+    markdown: String,
+    attachments: List<Models.Attachment>,
+): List<MarkdownImageAwareSegment> {
+    val segments = mutableListOf<MarkdownImageAwareSegment>()
+    val text = StringBuilder()
+
+    fun flushText() {
+        val value = text.toString().trim('\n')
+        if (value.isNotBlank()) segments += MarkdownTextSegment(value)
+        text.clear()
+    }
+
+    markdown.lines().forEach { line ->
+        val match = MARKDOWN_IMAGE_LINE_REGEX.matchEntire(line.trim())
+        if (match != null) {
+            flushText()
+            val alt = clean(match.groupValues[1]).ifBlank { "image" }
+            val target = clean(match.groupValues[2]).trim('<', '>')
+            segments += MarkdownImageSegment(
+                alt = alt,
+                url = resolveMarkdownAttachmentImageUrl(target, alt, attachments),
+            )
+        } else {
+            if (text.isNotEmpty()) text.append('\n')
+            text.append(line)
+        }
+    }
+    flushText()
+    return segments.ifEmpty { listOf(MarkdownTextSegment(markdown)) }
+}
+
+private fun resolveMarkdownAttachmentImageUrl(
+    target: String,
+    alt: String,
+    attachments: List<Models.Attachment>,
+): String {
+    val normalizedTarget = clean(target)
+    val match = attachments.firstOrNull { attachment ->
+        val url = clean(attachment.url)
+        val downloadUrl = clean(attachment.downloadUrl)
+        val filename = clean(attachment.filename)
+        url == normalizedTarget ||
+            downloadUrl == normalizedTarget ||
+            filename.equals(alt, ignoreCase = true)
+    }
+    return clean(match?.downloadUrl).ifBlank {
+        clean(match?.url).ifBlank { normalizedTarget }
+    }
+}
+
+@Composable
+private fun MulticaMarkdownImage(
+    image: MarkdownImageSegment,
+    onOpen: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val imageUrl = remember(image.url) { absoluteMarkdownImageUrl(image.url) }
+    val authStore = remember(context) { AuthStore(context.applicationContext) }
+    val cookieHeader = remember(authStore) { authStore.cloudFrontCookieHeader() }
+    val token = remember(authStore) { authStore.token().orEmpty() }
+    val imageRequest = remember(context, imageUrl, cookieHeader, token) {
+        ImageRequest.Builder(context)
+            .data(imageUrl)
+            .crossfade(true)
+            .apply {
+                if (token.isNotBlank() && imageUrl.startsWith(BuildConfig.MULTICA_API_BASE_URL)) {
+                    addHeader("Authorization", "Bearer $token")
+                }
+                if (cookieHeader.isNotBlank() && imageUrl.contains("static.multica.ai")) {
+                    addHeader("Cookie", cookieHeader)
+                }
+            }
+            .build()
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { if (imageUrl.isNotBlank()) onOpen(imageUrl) }
+            .semantics { contentDescription = "Markdown Image ${image.alt}" },
+        shape = RoundedCornerShape(14.dp),
+        color = MulticaColors.Surface.copy(alpha = 0.9f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(0.75.dp, MulticaColors.Border.copy(alpha = 0.48f)),
+    ) {
+        AsyncImage(
+            model = imageRequest,
+            contentDescription = image.alt,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 140.dp, max = 420.dp)
+                .background(MulticaColors.SurfaceElevated.copy(alpha = 0.35f))
+                .padding(6.dp),
         )
+    }
+}
+
+private fun absoluteMarkdownImageUrl(url: String): String {
+    val value = clean(url)
+    return if (value.startsWith("/")) {
+        BuildConfig.MULTICA_API_BASE_URL.trimEnd('/') + value
+    } else {
+        value
+    }
+}
+
+private fun openExternalUrl(context: Context, url: String) {
+    val target = clean(url)
+    if (target.isBlank()) return
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)))
     }
 }
 
@@ -20191,24 +20434,33 @@ private fun PilotRuntimesSettings(api: ApiClient, workspaceId: String, zh: Boole
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .semantics { contentDescription = "Runtime Web Table Header" }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    .semantics { contentDescription = "Runtime Web Table Header Aligned Columns" }
+                                    .padding(horizontal = RuntimeListHorizontalPadding, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(RuntimeListColumnGap),
                             ) {
+                                Spacer(Modifier.width(RuntimeListProviderColumnWidth))
                                 Text(
                                     if (zh) "Runtime" else "Runtime",
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f, fill = true),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                     color = MulticaColors.TextTertiary,
                                 )
                                 Text(
                                     if (zh) "健康" else "Health",
-                                    modifier = Modifier.width(88.dp),
+                                    modifier = Modifier.width(RuntimeListHealthColumnWidth),
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                     color = MulticaColors.TextTertiary,
                                     textAlign = TextAlign.Center,
                                 )
-                                Spacer(Modifier.width(42.dp))
+                                Text(
+                                    if (zh) "版本" else "Version",
+                                    modifier = Modifier.width(RuntimeListMetaColumnWidth),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                    color = MulticaColors.TextTertiary,
+                                    textAlign = TextAlign.End,
+                                )
+                                Spacer(Modifier.width(RuntimeListActionColumnWidth))
                             }
                         }
                     }
@@ -20358,6 +20610,13 @@ private fun RuntimesWebNoMatchesState(
     }
 }
 
+private val RuntimeListProviderColumnWidth = 34.dp
+private val RuntimeListHealthColumnWidth = 72.dp
+private val RuntimeListMetaColumnWidth = 76.dp
+private val RuntimeListActionColumnWidth = 36.dp
+private val RuntimeListHorizontalPadding = 10.dp
+private val RuntimeListColumnGap = 8.dp
+
 @Composable
 private fun RuntimeWebDenseRow(
     runtime: Models.Runtime,
@@ -20393,11 +20652,15 @@ private fun RuntimeWebDenseRow(
                 .fillMaxWidth()
                 .border(1.dp, MulticaColors.Border.copy(alpha = 0.58f), RoundedCornerShape(8.dp))
                 .clickable(onClick = onOpen)
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .padding(horizontal = RuntimeListHorizontalPadding, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(RuntimeListColumnGap),
         ) {
-            RuntimeProviderMark(provider = runtime.provider, runtimeMode = runtime.runtimeMode)
+            RuntimeProviderMark(
+                provider = runtime.provider,
+                runtimeMode = runtime.runtimeMode,
+                modifier = Modifier.size(RuntimeListProviderColumnWidth),
+            )
             RuntimeRowNameBlock(
                 baseName = nameParts.first,
                 hostname = nameParts.second,
@@ -20406,11 +20669,11 @@ private fun RuntimeWebDenseRow(
                 deviceInfo = runtime.deviceInfo,
                 lastSeenAt = runtime.lastSeenAt,
                 zh = zh,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f, fill = true),
             )
             Row(
                 modifier = Modifier
-                    .width(88.dp)
+                    .width(RuntimeListHealthColumnWidth)
                     .semantics { contentDescription = "Runtime Health ${runtimeHealthLabel(health, zh)}" },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
@@ -20431,7 +20694,7 @@ private fun RuntimeWebDenseRow(
                 )
             }
             Column(
-                modifier = Modifier.widthIn(min = 72.dp, max = 96.dp),
+                modifier = Modifier.width(RuntimeListMetaColumnWidth),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
                 horizontalAlignment = Alignment.End,
             ) {
@@ -20444,7 +20707,7 @@ private fun RuntimeWebDenseRow(
                 onClick = { onExpandedChange(true) },
                 tone = if (expanded) MulticaButtonTone.Primary else MulticaButtonTone.Ghost,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(RuntimeListActionColumnWidth)
                     .semantics { contentDescription = "Runtime Actions ${runtime.name}" },
             )
             MulticaCupertinoActionSheet(
@@ -20537,7 +20800,7 @@ private fun RuntimeRowNameBlock(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.semantics { contentDescription = "Runtime Row Name Block ${baseName.ifBlank { hostname ?: "" }}" },
+        modifier = modifier.semantics { contentDescription = "Runtime Row Name Expanded Layout ${baseName.ifBlank { hostname ?: "" }}" },
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
@@ -20545,7 +20808,7 @@ private fun RuntimeRowNameBlock(
             modifier = Modifier.semantics { contentDescription = "Runtime Row Base Name ${baseName.ifBlank { "untitled" }}" },
             style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
             color = MulticaColors.Text,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
@@ -21321,11 +21584,11 @@ private fun RuntimeDetailWebDenseRow(
                         fontSize = 13.sp,
                         lineHeight = 16.sp,
                         fontWeight = FontWeight.Medium,
-                    ),
-                    color = MulticaColors.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            ),
+            color = MulticaColors.Text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
