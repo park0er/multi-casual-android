@@ -548,8 +548,11 @@ private fun ComposePilotApp(
     initialIssueId: String? = null,
     initialTabName: String? = null,
 ) {
+    val context = LocalContext.current
     var appState by remember { mutableStateOf<PilotState>(PilotState.Loading) }
     var refresh by remember { mutableIntStateOf(0) }
+    var showAnalyticsConsent by remember { mutableStateOf(AppAnalytics.shouldPromptForConsent(context)) }
+    val zh = authStore.isChinese()
 
     LaunchedEffect(refresh) {
         appState = PilotState.Loading
@@ -612,6 +615,27 @@ private fun ComposePilotApp(
             onSessionUpdated = { appState = PilotState.Ready(it) },
         )
     }
+
+    MulticaCupertinoAlertDialog(
+        visible = showAnalyticsConsent,
+        title = if (zh) "允许基础使用统计？" else "Allow basic usage analytics?",
+        message = if (zh) {
+            "Multi-Casual 只会上报 app_open 启动事件，用于统计用户量和日活。不会采集页面浏览、聊天内容、文件内容、邮箱、Token 或精确位置。中国大陆用户走友盟+，海外用户走 PostHog。你可以选择不同意，应用仍可继续使用。"
+        } else {
+            "Multi-Casual only reports the app_open event to measure user count and daily active users. It does not collect page views, chat content, file content, email, tokens, or precise location. Mainland China routes to Umeng+, while global users route to PostHog. You can decline and still use the app."
+        },
+        cancelText = if (zh) "不同意" else "Decline",
+        confirmText = if (zh) "同意并继续" else "Agree",
+        contentDescription = "Analytics Consent",
+        onDismissRequest = {
+            AppAnalytics.denyConsent(context)
+            showAnalyticsConsent = false
+        },
+        onConfirm = {
+            AppAnalytics.grantConsentAndInitialize(context)
+            showAnalyticsConsent = false
+        },
+    )
 }
 
 @Composable
@@ -710,7 +734,7 @@ private fun PilotLoginScreen(
                         )
                     }
                     Text(
-                        text = if (zh) "登录 Multica" else "Sign in to Multica",
+                        text = if (zh) "登录 Multi-Casual" else "Sign in to Multi-Casual",
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold),
                         color = MulticaColors.Text,
                         textAlign = TextAlign.Center,
@@ -983,7 +1007,7 @@ private fun PilotNoWorkspaceOnboarding(
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         Text(
-                            text = "Multica",
+                            text = "Multi-Casual",
                             style = MaterialTheme.typography.titleLarge.copy(fontSize = 28.sp, lineHeight = 33.sp),
                             color = MulticaColors.Text,
                             fontWeight = FontWeight.Bold,
@@ -2023,7 +2047,7 @@ private fun PilotSearchPage(
     }
 
     PilotListPage(
-        title = if (zh) "搜索 Multica" else "Search Multica",
+        title = if (zh) "搜索 Multi-Casual" else "Search Multi-Casual",
         leading = { PilotSecondaryBackButton(zh = zh, onBack = onBack) },
     ) {
         item {
@@ -3846,7 +3870,7 @@ private fun ChatWindowWebEmptyState(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         MulticaEmptyState(
-            title = if (zh) "欢迎使用 Multica" else "Welcome to Multica",
+            title = if (zh) "欢迎使用 Multi-Casual" else "Welcome to Multi-Casual",
             description = if (zh) "试试问" else "Try asking",
         )
         Column(
@@ -13444,11 +13468,11 @@ private fun PilotInlineResultBannersPreview() {
                                     .put("id", "comment-preview")
                                     .put("content", "Inbox opened this issue at the exact comment.")
                                     .put("author_type", "member")
-                                    .put("author_name", "Multica")
+                                    .put("author_name", "Multi-Casual")
                                     .put("created_at", "2026-05-14T08:00:00Z")
                             )
                         },
-                        authorName = "Multica",
+                        authorName = "Multi-Casual",
                         expandedActions = false,
                         contentExpanded = true,
                         highlighted = true,
@@ -24654,7 +24678,7 @@ private fun feedbackTypeOptions(zh: Boolean): List<FeedbackTypeOption> = listOf(
     FeedbackTypeOption(
         key = "feature",
         label = if (zh) "功能建议" else "Feature request",
-        detail = if (zh) "一个希望 Multica 支持的新能力。" else "A capability you want Multica to support.",
+        detail = if (zh) "一个希望 Multi-Casual 支持的新能力。" else "A capability you want Multi-Casual to support.",
         icon = Icons.Outlined.Bolt,
     ),
     FeedbackTypeOption(
@@ -26673,9 +26697,9 @@ private fun AgentsWebEmptyState(
         MulticaEmptyState(
             title = if (zh) "还没有智能体" else "No agents yet",
             description = if (zh) {
-                "创建一个智能体，像分配给同事那样把 issue 交给它。本地智能体在你的机器上运行，云智能体在 Multica 运行时上运行。"
+                "创建一个智能体，像分配给同事那样把 issue 交给它。本地智能体在你的机器上运行，云智能体在 Multi-Casual 运行时上运行。"
             } else {
-                "Create an agent and assign it issues, like any teammate. Local agents run on your machine; cloud agents run on Multica's runtime."
+                "Create an agent and assign it issues, like any teammate. Local agents run on your machine; cloud agents run on Multi-Casual's runtime."
             },
         )
     }
