@@ -19,11 +19,11 @@ final class OnboardingPayload {
         JSONObject payload = new JSONObject();
         payload.put("workspace_id", workspaceId);
         payload.put("project", new JSONObject()
-                .put("title", "Getting Started with Multica")
-                .put("description", "A lightweight starter project for learning Multica on mobile.")
+                .put("title", "Getting Started with Multi-Casual")
+                .put("description", "A lightweight starter project for learning Multi-Casual on mobile.")
                 .put("icon", "sparkles"));
         payload.put("welcome_issue_template", new JSONObject()
-                .put("title", "Welcome to Multica")
+                .put("title", "Welcome to Multi-Casual")
                 .put("description", "Use this issue to test comments, Markdown, status changes, and agent collaboration.")
                 .put("priority", "high"));
         payload.put("agent_guided_sub_issues", new JSONArray()
