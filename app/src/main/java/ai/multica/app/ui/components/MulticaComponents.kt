@@ -222,7 +222,7 @@ private fun MulticaGlobalActionsBar(
                     )
                 }
                 Text(
-                    text = workspaceName.ifBlank { "Multica" },
+                    text = workspaceName.ifBlank { "Multi-Casual" },
                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
                     color = MulticaColors.Text,
                     maxLines = 1,
@@ -909,14 +909,14 @@ fun MulticaBottomNav(
                         Modifier.hazeEffect(
                             hazeState,
                             style = HazeDefaults.style(
-                                backgroundColor = MulticaColors.SurfaceElevated.copy(alpha = 0.72f),
+                                backgroundColor = MulticaColors.SurfaceElevated,
                                 blurRadius = 28.dp,
                                 noiseFactor = 0.07f,
                             ),
                         )
                     }
                 )
-                .background(MulticaColors.SurfaceElevated.copy(alpha = 0.72f))
+                .background(MulticaColors.SurfaceElevated)
                 .border(0.5.dp, MulticaColors.Border.copy(alpha = 0.62f), RoundedCornerShape(28.dp))
                 .padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
