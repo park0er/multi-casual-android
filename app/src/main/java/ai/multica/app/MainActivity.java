@@ -247,7 +247,7 @@ public final class MainActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(18), dp(12), dp(14), dp(10));
         header.setBackgroundColor(0xFFFFFFFF);
-        TextView title = label("Multica", 22, TEXT, true);
+        TextView title = label("Multi-Casual", 22, TEXT, true);
         header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         if (!workspaces.isEmpty()) {
@@ -2190,7 +2190,7 @@ public final class MainActivity extends Activity {
             switch (key) {
                 case "loading": return "加载中...";
                 case "sessionExpired": return "登录已过期，请重新登录";
-                case "signIn": return "登录 Multica";
+                case "signIn": return "登录 Multi-Casual";
                 case "signInHint": return "输入邮箱获取登录验证码";
                 case "continue": return "继续";
                 case "google": return "使用 Google 继续";
@@ -2303,7 +2303,7 @@ public final class MainActivity extends Activity {
             switch (key) {
                 case "loading": return "Loading...";
                 case "sessionExpired": return "Session expired. Please sign in again.";
-                case "signIn": return "Sign in to Multica";
+                case "signIn": return "Sign in to Multi-Casual";
                 case "signInHint": return "Enter your email to get a login code";
                 case "continue": return "Continue";
                 case "google": return "Continue with Google";

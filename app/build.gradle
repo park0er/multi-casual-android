@@ -4,6 +4,18 @@ plugins {
     id "org.jetbrains.kotlin.plugin.compose"
 }
 
+def umengPublicAppKey = providers.gradleProperty("multicaUmengPublicAppKey")
+        .orElse("")
+        .get()
+def postHogPublicApiKey = providers.gradleProperty("multicaPostHogPublicApiKey")
+        .orElse("")
+        .get()
+def postHogPublicHost = providers.gradleProperty("multicaPostHogPublicHost")
+        .orElse("https://us.i.posthog.com")
+        .get()
+def analyticsRoute = providers.gradleProperty("multicaAnalyticsRoute")
+        .orElse("auto")
+        .get()
 
 android {
     namespace "ai.multica.app"
@@ -11,7 +23,7 @@ android {
     buildToolsVersion "36.1.0"
 
     defaultConfig {
-        applicationId "ai.multica.app"
+        applicationId "ai.multicasual.app"
         minSdk 24
         targetSdk 36
         versionCode 1
@@ -37,14 +49,21 @@ android {
     productFlavors {
         create("public") {
             dimension "distribution"
-            applicationId "ai.multica.app"
-            resValue "string", "app_name", "Multica"
-            manifestPlaceholders = [usesCleartextTraffic: "false", deepLinkScheme: "multica"]
+            applicationId "ai.multicasual.app"
+            resValue "string", "app_name", "Multi-Casual"
+            manifestPlaceholders = [usesCleartextTraffic: "false", deepLinkScheme: "multi-casual"]
             buildConfigField "String", "MULTICA_ENVIRONMENT", "\"public\""
             buildConfigField "String", "MULTICA_API_BASE_URL", "\"https://api.multica.ai\""
             buildConfigField "String", "MULTICA_WEB_BASE_URL", "\"https://app.multica.ai\""
             buildConfigField "String", "MULTICA_WS_BASE_URL", "\"wss://api.multica.ai\""
-            buildConfigField "String", "MULTICA_AUTH_PREFS_NAME", "\"multica_auth\""
+            buildConfigField "String", "MULTICA_AUTH_PREFS_NAME", "\"multi_casual_auth\""
+            buildConfigField "String", "ANALYTICS_ROUTE", "\"${analyticsRoute}\""
+            buildConfigField "boolean", "UMENG_ENABLED", "true"
+            buildConfigField "String", "UMENG_APP_KEY", "\"${umengPublicAppKey}\""
+            buildConfigField "String", "UMENG_CHANNEL", "\"public\""
+            buildConfigField "boolean", "POSTHOG_ENABLED", "true"
+            buildConfigField "String", "POSTHOG_API_KEY", "\"${postHogPublicApiKey}\""
+            buildConfigField "String", "POSTHOG_HOST", "\"${postHogPublicHost}\""
         }
     }
 
@@ -56,6 +75,9 @@ android {
 }
 
 dependencies {
+    publicImplementation "com.umeng.umsdk:common:9.9.2"
+    publicImplementation "com.umeng.umsdk:asms:1.8.7.2"
+    publicImplementation "com.posthog:posthog-android:3.47.0"
     implementation platform("androidx.compose:compose-bom:2024.10.01")
     implementation "androidx.activity:activity-compose:1.9.3"
     implementation "androidx.compose.foundation:foundation"
