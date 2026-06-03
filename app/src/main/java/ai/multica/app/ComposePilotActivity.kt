@@ -620,9 +620,9 @@ private fun ComposePilotApp(
         visible = showAnalyticsConsent,
         title = if (zh) "允许基础使用统计？" else "Allow basic usage analytics?",
         message = if (zh) {
-            "Multi-Casual 只会上报 app_open 启动事件，用于统计用户量和日活。不会采集页面浏览、聊天内容、文件内容、邮箱、Token 或精确位置。中国大陆用户走友盟+，海外用户走 PostHog。你可以选择不同意，应用仍可继续使用。"
+            "Multi-Casual 只会上报 app_open 启动事件，用于统计用户量和日活。中国大陆用户使用友盟SDK，海外用户使用 PostHog SDK；SDK 可能按各自规则处理设备信息、Android ID、IP 地址和网络状态。我们不会采集页面浏览、聊天内容、文件内容、邮箱、Token 或精确位置。你可以选择不同意，应用仍可继续使用。"
         } else {
-            "Multi-Casual only reports the app_open event to measure user count and daily active users. It does not collect page views, chat content, file content, email, tokens, or precise location. Mainland China routes to Umeng+, while global users route to PostHog. You can decline and still use the app."
+            "Multi-Casual only reports the app_open event to measure user count and daily active users. Mainland China uses the Umeng SDK, while global users use the PostHog SDK; each SDK may process device information, Android ID, IP address, and network state under its own policy. We do not collect page views, chat content, file content, email, tokens, or precise location. You can decline and still use the app."
         },
         cancelText = if (zh) "不同意" else "Decline",
         confirmText = if (zh) "同意并继续" else "Agree",
@@ -3070,7 +3070,7 @@ private fun PilotChatSessions(
                 runCatching { api.createChatSession(workspaceId, agent.id, sessionTitle) }
             }
             creating = false
-            result.onSuccess {
+            result.onSuccess { session ->
                 title = ""
                 actionText = if (zh) "聊天会话已创建" else "Chat session created"
                 refresh++
@@ -6915,9 +6915,9 @@ private fun PilotIssueForm(
                         }
                     }
                     saving = false
-                    result.onSuccess {
+                    result.onSuccess { saved ->
                         pendingIssueAttachments = emptyList()
-                        onSaved(it)
+                        onSaved(saved)
                     }.onFailure {
                         saveError = "${if (zh) "保存失败" else "Save failed"}: ${it.message ?: it.toString()}"
                     }
@@ -12758,11 +12758,11 @@ private fun PilotProjects(
                 }
             }
             saving = false
-            result.onSuccess {
+            result.onSuccess { saved ->
                 formOpen = false
                 editingProject = null
                 projectQuery = ""
-                resultText = it.name
+                resultText = saved.name
                 onRefresh()
             }.onFailure {
                 resultText = "${if (zh) "项目保存失败" else "Project save failed"}: ${it.message ?: it.toString()}"
@@ -19536,7 +19536,7 @@ private fun PilotAutopilotsSettings(api: ApiClient, workspaceId: String, zh: Boo
                 }
             }
             saving = false
-            result.onSuccess {
+            result.onSuccess { saved ->
                 resultText = if (zh) "已保存" else "Saved"
                 resetForm()
                 refresh++
