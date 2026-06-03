@@ -4,18 +4,32 @@ plugins {
     id "org.jetbrains.kotlin.plugin.compose"
 }
 
-def umengPublicAppKey = providers.gradleProperty("multicaUmengPublicAppKey")
-        .orElse("")
-        .get()
-def postHogPublicApiKey = providers.gradleProperty("multicaPostHogPublicApiKey")
-        .orElse("")
-        .get()
-def postHogPublicHost = providers.gradleProperty("multicaPostHogPublicHost")
-        .orElse("https://us.i.posthog.com")
-        .get()
-def analyticsRoute = providers.gradleProperty("multicaAnalyticsRoute")
-        .orElse("auto")
-        .get()
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+
+def configValue = { String propertyName, String environmentName, String defaultValue ->
+    def localValue = localProperties.getProperty(propertyName)
+    if (localValue != null && !localValue.isBlank()) {
+        return localValue
+    }
+    def gradleValue = providers.gradleProperty(propertyName).orNull
+    if (gradleValue != null && !gradleValue.isBlank()) {
+        return gradleValue
+    }
+    def environmentValue = providers.environmentVariable(environmentName).orNull
+    if (environmentValue != null && !environmentValue.isBlank()) {
+        return environmentValue
+    }
+    return defaultValue
+}
+
+def umengPublicAppKey = configValue("multicaUmengPublicAppKey", "MULTICA_UMENG_PUBLIC_APP_KEY", "")
+def postHogPublicApiKey = configValue("multicaPostHogPublicApiKey", "MULTICA_POSTHOG_PUBLIC_API_KEY", "")
+def postHogPublicHost = configValue("multicaPostHogPublicHost", "MULTICA_POSTHOG_PUBLIC_HOST", "https://us.i.posthog.com")
+def analyticsRoute = configValue("multicaAnalyticsRoute", "MULTICA_ANALYTICS_ROUTE", "auto")
 
 android {
     namespace "ai.multica.app"
