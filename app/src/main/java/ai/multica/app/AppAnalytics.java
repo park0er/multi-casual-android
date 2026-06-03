@@ -33,16 +33,23 @@ public final class AppAnalytics {
 
     public static void denyConsent(Context context) {
         new AnalyticsConsentStore(context).deny();
+        submitUmengPolicyGrantResult(context, false);
         provider.optOut();
     }
+
 
     public static void initializeIfAllowed(Context context) {
         Context appContext = context.getApplicationContext();
         preInitializeIfNeeded(appContext);
-        if (!new AnalyticsConsentStore(appContext).isGranted()) {
+        AnalyticsConsentStore consentStore = new AnalyticsConsentStore(appContext);
+        if (!consentStore.isGranted()) {
+            if (consentStore.hasDecision()) {
+                submitUmengPolicyGrantResult(appContext, false);
+            }
             Log.i(TAG, "Analytics disabled until user grants consent.");
             return;
         }
+        submitUmengPolicyGrantResult(appContext, true);
         if (initialized) {
             trackAppOpenOnce(appContext);
             return;
@@ -69,6 +76,20 @@ public final class AppAnalytics {
             Log.i(TAG, "Umeng preInit completed.");
         } catch (Throwable error) {
             Log.w(TAG, "Umeng preInit failed; app launch continues.", error);
+        }
+    }
+
+    private static void submitUmengPolicyGrantResult(Context context, boolean granted) {
+        if (!BuildConfig.UMENG_ENABLED) {
+            return;
+        }
+        try {
+            Class.forName("com.umeng.commonsdk.UMConfigure")
+                    .getMethod("submitPolicyGrantResult", Context.class, boolean.class)
+                    .invoke(null, context.getApplicationContext(), granted);
+            Log.i(TAG, "Umeng policy grant result submitted granted=" + granted);
+        } catch (Throwable error) {
+            Log.w(TAG, "Umeng policy grant result failed; app launch continues.", error);
         }
     }
 
@@ -149,11 +170,13 @@ public final class AppAnalytics {
 
             @Override
             public void optOut() {}
+
         };
 
         void trackAppOpen(Map<String, Object> properties);
 
         void optOut();
+
     }
 
     private static final class UmengAnalyticsProvider implements AnalyticsProvider {
@@ -204,6 +227,7 @@ public final class AppAnalytics {
 
         @Override
         public void optOut() {}
+
     }
 
     private static final class PostHogAnalyticsProvider implements AnalyticsProvider {
@@ -281,6 +305,7 @@ public final class AppAnalytics {
                 Log.w(TAG, "PostHog optOut failed; app continues.", error);
             }
         }
+
 
         private static void invokeSetter(Class<?> configClass, Object config, String methodName, boolean value) {
             try {
