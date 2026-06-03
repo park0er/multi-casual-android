@@ -38,6 +38,7 @@ public final class AppAnalytics {
 
     public static void initializeIfAllowed(Context context) {
         Context appContext = context.getApplicationContext();
+        preInitializeIfNeeded(appContext);
         if (!new AnalyticsConsentStore(appContext).isGranted()) {
             Log.i(TAG, "Analytics disabled until user grants consent.");
             return;
@@ -55,6 +56,20 @@ public final class AppAnalytics {
             initialized = true;
         }
         trackAppOpenOnce(appContext);
+    }
+
+    public static void preInitializeIfNeeded(Context context) {
+        if (!BuildConfig.UMENG_ENABLED || TextUtils.isEmpty(safe(BuildConfig.UMENG_APP_KEY))) {
+            return;
+        }
+        try {
+            Class.forName("com.umeng.commonsdk.UMConfigure")
+                    .getMethod("preInit", Context.class, String.class, String.class)
+                    .invoke(null, context.getApplicationContext(), BuildConfig.UMENG_APP_KEY, BuildConfig.UMENG_CHANNEL);
+            Log.i(TAG, "Umeng preInit completed.");
+        } catch (Throwable error) {
+            Log.w(TAG, "Umeng preInit failed; app launch continues.", error);
+        }
     }
 
     static String selectedRouteForTesting(Context context) {
