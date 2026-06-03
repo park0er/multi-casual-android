@@ -51,7 +51,11 @@ android {
             dimension "distribution"
             applicationId "ai.multicasual.app"
             resValue "string", "app_name", "Multi-Casual"
-            manifestPlaceholders = [usesCleartextTraffic: "false", deepLinkScheme: "multi-casual"]
+            manifestPlaceholders = [
+                    usesCleartextTraffic: "false",
+                    deepLinkScheme: "multi-casual",
+                    umengDeepLinkScheme: "um.${umengPublicAppKey}"
+            ]
             buildConfigField "String", "MULTICA_ENVIRONMENT", "\"public\""
             buildConfigField "String", "MULTICA_API_BASE_URL", "\"https://api.multica.ai\""
             buildConfigField "String", "MULTICA_WEB_BASE_URL", "\"https://app.multica.ai\""
