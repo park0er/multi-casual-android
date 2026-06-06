@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -367,6 +369,7 @@ private data class PilotIssueDetailData(
     val projects: List<Models.Project>,
     val members: List<Models.Member>,
     val agents: List<Models.Agent>,
+    val squads: List<Models.Squad>,
     val issueLabels: List<Models.IssueLabel>,
     val allLabels: List<Models.IssueLabel>,
     val subscribers: List<Models.IssueSubscriber>,
@@ -381,6 +384,7 @@ private data class PilotIssueFormOptions(
     val projects: List<Models.Project>,
     val members: List<Models.Member>,
     val agents: List<Models.Agent>,
+    val squads: List<Models.Squad>,
 )
 
 private data class PilotChatMessagesData(
@@ -5622,6 +5626,7 @@ private fun PilotIssues(
     var movingBoardIssueId by remember(personal, workspaceId) { mutableStateOf<String?>(null) }
     var assigneeMembers by remember(workspaceId) { mutableStateOf<List<Models.Member>>(emptyList()) }
     var assigneeAgents by remember(workspaceId) { mutableStateOf<List<Models.Agent>>(emptyList()) }
+    var assigneeSquads by remember(workspaceId) { mutableStateOf<List<Models.Squad>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(personal, myIssueScope, issues) {
@@ -5733,6 +5738,7 @@ private fun PilotIssues(
         }.onSuccess { (members, agents) ->
             assigneeMembers = members
             assigneeAgents = agents
+            assigneeSquads = runCatching { api.squads(workspaceId) }.getOrElse { emptyList() }
         }
     }
 
@@ -6070,6 +6076,7 @@ private fun PilotIssues(
                                             issue,
                                             assigneeMembers,
                                             assigneeAgents,
+                                            assigneeSquads,
                                             currentUser,
                                         )
                                         if (isNotBlank()) append(" · ")
@@ -6772,6 +6779,7 @@ private fun PilotIssueForm(
                     projects = api.projects(session.workspace.id, 500, 0).items,
                     members = api.members(session.workspace.id),
                     agents = api.agents(session.workspace.id),
+                    squads = runCatching { api.squads(session.workspace.id) }.getOrElse { emptyList() },
                 )
             }
         }
@@ -6792,6 +6800,7 @@ private fun PilotIssueForm(
                 session.user,
                 options.members,
                 options.agents,
+                options.squads,
             ).map { PilotAssigneeOption(it.id, it.type, it.name) }
             var title by remember(issue?.id) { mutableStateOf(issue?.title.orEmpty()) }
             var description by remember(issue?.id) { mutableStateOf(issue?.description.orEmpty()) }
@@ -8868,6 +8877,7 @@ private fun IssueCommentCard(
     authorAgentStatus: String? = null,
     members: List<Models.Member> = emptyList(),
     agents: List<Models.Agent> = emptyList(),
+    squads: List<Models.Squad> = emptyList(),
     currentUser: Models.User? = null,
     onIssueIdClick: ((String) -> Unit)? = null,
     onIssueReferenceClick: ((String) -> Unit)? = null,
@@ -8962,6 +8972,7 @@ private fun IssueCommentCard(
                             renderedContent,
                             members = members,
                             agents = agents,
+                            squads = squads,
                             currentUser = currentUser,
                             attachments = comment.attachments,
                             onIssueIdClick = onIssueIdClick,
@@ -9387,6 +9398,7 @@ private fun PilotIssueDetail(
             projects = core.projects,
             members = core.members,
             agents = core.agents,
+            squads = emptyList(),
             issueLabels = emptyList(),
             allLabels = emptyList(),
             subscribers = emptyList(),
@@ -9417,9 +9429,11 @@ private fun PilotIssueDetail(
             val timelineAnchor = highlightCommentId ?: core.comments.lastOrNull()?.id
             val timeline = runCatching { api.issueTimeline(workspaceId, issueId, 10, null, null, timelineAnchor) }.getOrNull()
             val activeTasks = runCatching { api.activeIssueTasks(workspaceId, issueId) }.getOrElse { emptyList() }
+            val squads = runCatching { api.squads(workspaceId) }.getOrElse { emptyList() }
             initialData.copy(
                 parentIssue = parentIssue,
                 projects = projects,
+                squads = squads,
                 issueLabels = issueLabels,
                 allLabels = allLabels,
                 subscribers = subscribers,
@@ -9651,7 +9665,7 @@ private fun PilotIssueDetail(
                     Models.Assignee(
                         assigneeId,
                         data.issue.assigneeType ?: "member",
-                        Models.issueAssigneeDisplayName(data.issue, data.members, data.agents, currentUser),
+                        Models.issueAssigneeDisplayName(data.issue, data.members, data.agents, data.squads, currentUser),
                     )
                 }
                 scope.launch {
@@ -9803,7 +9817,7 @@ private fun PilotIssueDetail(
             }
 
             fun sendNewComment() {
-                val content = AgentMentionMarkdown.markdownFromDraft(newCommentDraft.trim(), data.agents)
+                val content = AgentMentionMarkdown.markdownFromDraft(newCommentDraft.trim(), data.agents, data.members, data.squads)
                 if (sendingNewComment || content.isEmpty() && pendingCommentAttachments.isEmpty()) return
                 sendingNewComment = true
                 newCommentMessage = null
@@ -9826,7 +9840,7 @@ private fun PilotIssueDetail(
 
             fun sendReply(thread: IssueCommentThreads.Thread) {
                 val parentId = thread.root.id
-                val explicitContent = AgentMentionMarkdown.markdownFromDraft(replyDraft.trim(), data.agents)
+                val explicitContent = AgentMentionMarkdown.markdownFromDraft(replyDraft.trim(), data.agents, data.members, data.squads)
                 val content = IssueCommentThreads.replyContentForThread(thread, explicitContent, data.agents)
                 if (sendingReply || (content.isEmpty() && pendingReplyAttachments.isEmpty())) return
                 sendingReply = true
@@ -9925,12 +9939,14 @@ private fun PilotIssueDetail(
                             contentDescription = "Issue Comment Bottom Haze Composer $WEB_SSOT_COMMENT_INPUT"
                         },
                     ) {
-                        if (replyingThread != null) {
+if (replyingThread != null) {
                             IssueCommentReplyBox(
                                 parentId = replyingThread.root.id,
                                 draft = replyDraft,
                                 pendingAttachments = pendingReplyAttachments,
                                 agents = data.agents,
+                                members = data.members,
+                                squads = data.squads,
                                 uploadingAttachment = uploadingReplyAttachment,
                                 sending = sendingReply,
                                 zh = zh,
@@ -9954,6 +9970,8 @@ private fun PilotIssueDetail(
                                 draft = newCommentDraft,
                                 pendingAttachments = pendingCommentAttachments,
                                 agents = data.agents,
+                                members = data.members,
+                                squads = data.squads,
                                 uploadingAttachment = uploadingCommentAttachment,
                                 sending = sendingNewComment,
                                 zh = zh,
@@ -9988,7 +10006,7 @@ private fun PilotIssueDetail(
                     IssueDetailCompactMetadata(
                         issue = data.issue,
                         issueLabels = data.issueLabels,
-                        assignee = Models.issueAssigneeDisplayName(data.issue, data.members, data.agents, currentUser),
+                        assignee = Models.issueAssigneeDisplayName(data.issue, data.members, data.agents, data.squads, currentUser),
                         project = projectName,
                         zh = zh,
                     )
@@ -10026,6 +10044,7 @@ private fun PilotIssueDetail(
                             data.issue.description,
                             members = data.members,
                             agents = data.agents,
+                            squads = data.squads,
                             currentUser = currentUser,
                             attachments = data.attachments,
                             onIssueIdClick = { onOpenIssue(it) },
@@ -10185,6 +10204,7 @@ private fun PilotIssueDetail(
                                     authorAgentStatus = commentAuthorAgentStatus(comment, data.agents),
                                     members = data.members,
                                     agents = data.agents,
+                                    squads = data.squads,
                                     currentUser = currentUser,
                                     onIssueIdClick = { onOpenIssue(it) },
                                     onIssueReferenceClick = { openIssueReference(it) },
@@ -10288,11 +10308,11 @@ private fun PilotIssueDetail(
                             }
                         }
                         if (!replyMessage.isNullOrBlank() && replyingCommentId == thread.root.id) {
-                        PilotInlineResultState(
-                            message = replyMessage.orEmpty(),
-                            isError = pilotInlineResultIsError(replyMessage.orEmpty()),
-                            contentDescription = "Issue Detail Reply Result Web Banner",
-                        )
+                            PilotInlineResultState(
+                                message = replyMessage.orEmpty(),
+                                isError = pilotInlineResultIsError(replyMessage.orEmpty()),
+                                contentDescription = "Issue Detail Reply Result Web Banner",
+                            )
                         }
                     }
                 }
@@ -10741,6 +10761,8 @@ private fun IssueCommentReplyBox(
     draft: String,
     pendingAttachments: List<Models.Attachment>,
     agents: List<Models.Agent>,
+    members: List<Models.Member>,
+    squads: List<Models.Squad>,
     uploadingAttachment: Boolean,
     sending: Boolean,
     zh: Boolean,
@@ -10757,10 +10779,10 @@ private fun IssueCommentReplyBox(
     val focusRequester = remember(parentId) { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val replyActionModifier = Modifier.size(42.dp)
-    val mentionAgents = remember(agents, mentionQuery) {
+val replyActionModifier = Modifier.size(42.dp)
+    val mentionItems = remember(agents, members, squads, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
-        agents
+        val agentItems = agents
             .filter { it.archivedAt.isBlank() }
             .filter { agent ->
                 query.isBlank() ||
@@ -10769,7 +10791,24 @@ private fun IssueCommentReplyBox(
                     agent.id.lowercase().contains(query)
             }
             .sortedBy { it.name.lowercase() }
-            .take(8)
+            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "agent") }
+        val memberItems = members
+            .filter { member ->
+                query.isBlank() ||
+                    member.displayName.lowercase().contains(query) ||
+                    member.email.lowercase().contains(query)
+            }
+            .sortedBy { it.displayName.lowercase() }
+            .map { Triple(it.id, it.displayName, "member") }
+        val squadItems = squads
+            .filter { squad ->
+                query.isBlank() ||
+                    squad.name.lowercase().contains(query) ||
+                    squad.description.lowercase().contains(query)
+            }
+            .sortedBy { it.name.lowercase() }
+            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "squad") }
+        agentItems + memberItems + squadItems
     }
     LaunchedEffect(parentId) {
         delay(180)
@@ -10871,11 +10910,12 @@ private fun IssueCommentReplyBox(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .imePadding()
                         .semantics { contentDescription = "Issue Comment Reply Mention Web Picker" },
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = if (zh) "选择 Agent" else "Mention agent",
+                        text = if (zh) "选择 @对象" else "Mention someone",
                         modifier = Modifier.semantics { contentDescription = "Issue Comment Mention Web Header" },
                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
                         color = MulticaColors.Text,
@@ -10885,28 +10925,37 @@ private fun IssueCommentReplyBox(
                         onValueChange = { mentionQuery = it },
                         modifier = Modifier.fillMaxWidth(),
                         contentDescription = "Issue Comment Reply Mention Search",
-                        label = if (zh) "搜索 Agent" else "Search agents",
+                        label = if (zh) "搜索人、Agent、小队" else "Search people, agents, squads",
                         maxLines = 1,
                     )
-                    if (mentionAgents.isEmpty()) {
+                    if (mentionItems.isEmpty()) {
                         Text(
-                            text = if (zh) "没有可提及的 Agent" else "No agents available",
+                            text = if (zh) "没有可提及的对象" else "No mentionable items",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
                             color = MulticaColors.Muted,
                         )
                     } else {
-                        mentionAgents.forEach { agent ->
-                            IssueMentionAgentWebRow(
-                                agent = agent,
-                                contentDescription = "Issue Comment Reply Mention Agent Row ${agent.id}",
-                                onClick = {
-                                    val insertion = AgentMentionMarkdown.displayText(agent.name, agent.id)
-                                    val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
-                                    onDraftChange(draft + separator + insertion + " ")
-                                    mentionPickerOpen = false
-                                    mentionQuery = ""
-                                },
-                            )
+Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            mentionItems.forEach { (id, name, type) ->
+                                IssueMentionUnifiedRow(
+                                    name = name,
+                                    mentionType = type,
+                                    contentDescription = "Issue Comment Reply Mention $type Row $id",
+                                    onClick = {
+                                        val insertion = AgentMentionMarkdown.displayText(name, id)
+                                        val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
+                                        onDraftChange(draft + separator + insertion + " ")
+                                        mentionPickerOpen = false
+                                        mentionQuery = ""
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -10986,10 +11035,109 @@ private fun IssueMentionAgentWebRow(
 }
 
 @Composable
+private fun IssueMentionUnifiedRow(
+    name: String,
+    mentionType: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    val iconLetter = when (mentionType) {
+        "member" -> name.take(1).uppercase().ifBlank { "M" }
+        "squad" -> name.take(1).uppercase().ifBlank { "S" }
+        else -> name.take(1).uppercase().ifBlank { "A" }
+    }
+    val iconColor = when (mentionType) {
+        "member" -> MulticaColors.Text
+        "squad" -> MulticaColors.Accent
+        else -> MulticaColors.Accent
+    }
+    val iconBg = when (mentionType) {
+        "member" -> MulticaColors.AccentSoft.copy(alpha = 0.12f)
+        "squad" -> MulticaColors.AccentSoft.copy(alpha = 0.36f)
+        else -> MulticaColors.AccentSoft.copy(alpha = 0.24f)
+    }
+    val typeLabel = when (mentionType) {
+        "member" -> "member"
+        "squad" -> "squad"
+        else -> "agent"
+    }
+    val mentionMarkdown = when (mentionType) {
+        "member" -> AgentMentionMarkdown.memberMarkdown(name, "")
+        "squad" -> AgentMentionMarkdown.squadMarkdown(name, "")
+        else -> AgentMentionMarkdown.markdown(name, "")
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription
+                semanticsOnClick(label = name) {
+                    onClick()
+                    true
+                }
+            },
+        shape = RoundedCornerShape(8.dp),
+        color = MulticaColors.SurfaceElevated.copy(alpha = 0.78f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MulticaColors.Border.copy(alpha = 0.58f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(27.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(iconBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = iconLetter,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.SemiBold),
+                    color = iconColor,
+                    maxLines = 1,
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
+                    color = MulticaColors.Text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = typeLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+                    color = MulticaColors.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MulticaColors.TextTertiary,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+    }
+}
+
+
+@Composable
 private fun IssueCommentInputBar(
     draft: String,
     pendingAttachments: List<Models.Attachment>,
     agents: List<Models.Agent>,
+    members: List<Models.Member>,
+    squads: List<Models.Squad>,
     uploadingAttachment: Boolean,
     sending: Boolean,
     zh: Boolean,
@@ -11000,9 +11148,9 @@ private fun IssueCommentInputBar(
 ) {
     var mentionPickerOpen by remember { mutableStateOf(false) }
     var mentionQuery by remember { mutableStateOf("") }
-    val mentionAgents = remember(agents, mentionQuery) {
+    val mentionItems = remember(agents, members, squads, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
-        agents
+        val agentItems = agents
             .filter { it.archivedAt.isBlank() }
             .filter { agent ->
                 query.isBlank() ||
@@ -11011,7 +11159,24 @@ private fun IssueCommentInputBar(
                     agent.id.lowercase().contains(query)
             }
             .sortedBy { it.name.lowercase() }
-            .take(12)
+            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "agent") }
+        val memberItems = members
+            .filter { member ->
+                query.isBlank() ||
+                    member.displayName.lowercase().contains(query) ||
+                    member.email.lowercase().contains(query)
+            }
+            .sortedBy { it.displayName.lowercase() }
+            .map { Triple(it.id, it.displayName, "member") }
+        val squadItems = squads
+            .filter { squad ->
+                query.isBlank() ||
+                    squad.name.lowercase().contains(query) ||
+                    squad.description.lowercase().contains(query)
+            }
+            .sortedBy { it.name.lowercase() }
+            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "squad") }
+        agentItems + memberItems + squadItems
     }
     Surface(
         modifier = Modifier
@@ -11114,11 +11279,12 @@ private fun IssueCommentInputBar(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .imePadding()
                         .semantics { contentDescription = "Issue Comment Mention Web Picker" },
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = if (zh) "选择 Agent" else "Mention agent",
+                        text = if (zh) "选择 @对象" else "Mention someone",
                         modifier = Modifier.semantics { contentDescription = "Issue Comment Mention Web Header" },
                         style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold),
                         color = MulticaColors.Text,
@@ -11128,28 +11294,37 @@ private fun IssueCommentInputBar(
                         onValueChange = { mentionQuery = it },
                         modifier = Modifier.fillMaxWidth(),
                         contentDescription = "Issue Comment Mention Search",
-                        label = if (zh) "搜索 Agent" else "Search agents",
+                        label = if (zh) "搜索人、Agent、小队" else "Search people, agents, squads",
                         singleLine = true,
                     )
-                    if (mentionAgents.isEmpty()) {
+                    if (mentionItems.isEmpty()) {
                         Text(
-                            text = if (zh) "没有可提及的 Agent" else "No agents available",
+                            text = if (zh) "没有可提及的对象" else "No mentionable items",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
                             color = MulticaColors.Muted,
                         )
                     } else {
-                        mentionAgents.forEach { agent ->
-                            IssueMentionAgentWebRow(
-                                agent = agent,
-                                contentDescription = "Issue Comment Mention Agent Row ${agent.id}",
-                                onClick = {
-                                    val insertion = AgentMentionMarkdown.displayText(agent.name, agent.id)
-                                    val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
-                                    onDraftChange(draft + separator + insertion + " ")
-                                    mentionPickerOpen = false
-                                    mentionQuery = ""
-                                },
-                            )
+Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            mentionItems.forEach { (id, name, type) ->
+                                IssueMentionUnifiedRow(
+                                    name = name,
+                                    mentionType = type,
+                                    contentDescription = "Issue Comment Mention $type Row $id",
+                                    onClick = {
+                                        val insertion = AgentMentionMarkdown.displayText(name, id)
+                                        val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
+                                        onDraftChange(draft + separator + insertion + " ")
+                                        mentionPickerOpen = false
+                                        mentionQuery = ""
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -11583,6 +11758,7 @@ private fun MarkdownBlock(
     markdown: String,
     members: List<Models.Member> = emptyList(),
     agents: List<Models.Agent> = emptyList(),
+    squads: List<Models.Squad> = emptyList(),
     currentUser: Models.User? = null,
     attachments: List<Models.Attachment> = emptyList(),
     onIssueIdClick: ((String) -> Unit)? = null,
@@ -11591,7 +11767,7 @@ private fun MarkdownBlock(
     val textColor = MulticaColors.Text.toArgb()
     val mutedColor = MulticaColors.Muted.toArgb()
     val borderColor = MulticaColors.Border.toArgb()
-    val linkHandler = remember(members, agents, currentUser, onIssueIdClick, onIssueReferenceClick) {
+    val linkHandler = remember(members, agents, squads, currentUser, onIssueIdClick, onIssueReferenceClick) {
         object : MarkdownRenderer.LinkHandler {
             override fun resolveMentionLabel(
                 mentionType: String,
@@ -11604,6 +11780,7 @@ private fun MarkdownBlock(
                     fallbackLabel,
                     members,
                     agents,
+                    squads,
                     currentUser,
                 )
             }

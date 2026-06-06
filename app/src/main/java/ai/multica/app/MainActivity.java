@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private List<Models.Project> projectCache = new ArrayList<>();
     private List<Models.Member> memberCache = new ArrayList<>();
     private List<Models.Agent> agentCache = new ArrayList<>();
+    private List<Models.Squad> squadCache = new ArrayList<>();
     private List<Models.Runtime> runtimeCache = new ArrayList<>();
     private List<Models.Skill> skillCache = new ArrayList<>();
     private List<Models.Autopilot> autopilotCache = new ArrayList<>();
@@ -266,6 +267,7 @@ public final class MainActivity extends Activity {
                         projectCache = new ArrayList<>();
                         memberCache = new ArrayList<>();
                         agentCache = new ArrayList<>();
+                        squadCache = new ArrayList<>();
                         runtimeCache = new ArrayList<>();
                         skillCache = new ArrayList<>();
                         autopilotCache = new ArrayList<>();
@@ -565,6 +567,7 @@ public final class MainActivity extends Activity {
             projectCache = data.projects;
             memberCache = data.members;
             agentCache = data.agents;
+            try { squadCache = safeSquads(); } catch (Exception ignored) { squadCache = new ArrayList<>(); }
             LinearLayout screen = vertical();
             LinearLayout scrollBody = vertical();
             scrollBody.setPadding(dp(14), dp(8), dp(14), dp(14));
@@ -1833,6 +1836,10 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private List<Models.Squad> safeSquads() {
+        try { return api.squads(currentWorkspace.id); } catch (Exception e) { return new ArrayList<>(); }
+    }
+
     private List<Models.Agent> safeAgents() {
         if (currentWorkspace == null) return Models.emptyList();
         try {
@@ -1854,7 +1861,7 @@ public final class MainActivity extends Activity {
     private List<Models.Assignee> assignees(boolean includeEmpty) {
         if (memberCache.isEmpty()) memberCache = safeMembers();
         if (agentCache.isEmpty()) agentCache = safeAgents();
-        return Models.issueAssignees(includeEmpty, t("unassigned"), currentUser, memberCache, agentCache);
+        return Models.issueAssignees(includeEmpty, t("unassigned"), currentUser, memberCache, agentCache, squadCache);
     }
 
     private String assigneeName(String id, String type) {
@@ -1862,7 +1869,10 @@ public final class MainActivity extends Activity {
         if (currentUser != null && currentUser.id.equals(id)) return currentUser.name;
         for (Models.Member member : memberCache) if (member.id.equals(id)) return member.displayName;
         for (Models.Agent agent : agentCache) if (agent.id.equals(id)) return agent.name;
-        String prefix = "agent".equals(type) ? t("agent") : t("member");
+        String prefix;
+        if ("agent".equals(type)) prefix = t("agent");
+        else if ("squad".equals(type)) prefix = t("squad");
+        else prefix = t("member");
         return prefix + " " + Models.shortId(id);
     }
 
@@ -2252,6 +2262,7 @@ public final class MainActivity extends Activity {
                 case "unassigned": return "未分配";
                 case "member": return "成员";
                 case "agent": return "Agent";
+                case "squad": return "小队";
                 case "archive": return "归档";
                 case "archived": return "已归档";
                 case "archiveAgent": return "归档 Agent";
@@ -2364,6 +2375,7 @@ public final class MainActivity extends Activity {
                 case "unassigned": return "Unassigned";
                 case "member": return "Member";
                 case "agent": return "Agent";
+                case "squad": return "Squad";
                 case "archive": return "Archive";
                 case "archived": return "Archived";
                 case "archiveAgent": return "Archive Agent";
