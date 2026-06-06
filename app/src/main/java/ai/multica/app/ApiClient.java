@@ -237,12 +237,12 @@ final class ApiClient {
     }
 
     List<Models.Issue> searchIssues(String workspaceId, String text, int limit) throws Exception {
-        JSONObject query = query(null,
-                "workspace_id", workspaceId,
-                "q", text,
-                "limit", limit,
-                "include_closed", "true");
-        JSONObject json = requestObject("GET", "/api/issues/search", query, null);
+        return searchIssues(workspaceId, null, text, limit);
+    }
+
+    List<Models.Issue> searchIssues(String workspaceId, String workspaceSlug, String text, int limit) throws Exception {
+        JSONObject json = requestObject("GET", "/api/issues/search",
+                searchQuery(text, limit), null, searchWorkspaceHeaders(workspaceId, workspaceSlug));
         return parseArray(extractArray(json, "issues"), Models.Issue::new);
     }
 
@@ -582,12 +582,12 @@ final class ApiClient {
     }
 
     List<Models.Project> searchProjects(String workspaceId, String text, int limit) throws Exception {
-        JSONObject query = query(null,
-                "workspace_id", workspaceId,
-                "q", text,
-                "limit", limit,
-                "include_closed", "true");
-        JSONObject json = requestObject("GET", "/api/projects/search", query, null);
+        return searchProjects(workspaceId, null, text, limit);
+    }
+
+    List<Models.Project> searchProjects(String workspaceId, String workspaceSlug, String text, int limit) throws Exception {
+        JSONObject json = requestObject("GET", "/api/projects/search",
+                searchQuery(text, limit), null, searchWorkspaceHeaders(workspaceId, workspaceSlug));
         return parseArray(extractArray(json, "projects"), Models.Project::new);
     }
 
@@ -1529,6 +1529,25 @@ final class ApiClient {
             obj.put(key, value);
         }
         return obj;
+    }
+
+    static JSONObject searchQuery(String text, int limit) throws Exception {
+        return query(null,
+                "q", text,
+                "limit", limit,
+                "include_closed", "true");
+    }
+
+    static Map<String, String> searchWorkspaceHeaders(String workspaceId, String workspaceSlug) {
+        String slug = workspaceSlug == null ? "" : workspaceSlug.trim();
+        if (!slug.isEmpty()) {
+            return Collections.singletonMap("X-Workspace-Slug", slug);
+        }
+        String id = workspaceId == null ? "" : workspaceId.trim();
+        if (!id.isEmpty()) {
+            return Collections.singletonMap("X-Workspace-ID", id);
+        }
+        throw new IllegalArgumentException("workspace_id is required. Select a workspace first.");
     }
 
     private static boolean isBlankQueryValue(Object value) {

@@ -23,7 +23,7 @@ public final class AppAnalytics {
     private AppAnalytics() {}
 
     public static boolean shouldPromptForConsent(Context context) {
-        return !new AnalyticsConsentStore(context).hasDecision();
+        return !new AnalyticsConsentStore(context).isGranted();
     }
 
     public static void grantConsentAndInitialize(Context context) {

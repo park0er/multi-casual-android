@@ -1,8 +1,10 @@
 package ai.multica.app
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
@@ -554,6 +556,19 @@ private fun ComposePilotApp(
     var showAnalyticsConsent by remember { mutableStateOf(AppAnalytics.shouldPromptForConsent(context)) }
     val zh = authStore.isChinese()
 
+    fun exitApp() {
+        var currentContext: Context? = context
+        while (currentContext is ContextWrapper) {
+            if (currentContext is Activity) {
+                currentContext.finishAffinity()
+                return
+            }
+            currentContext = currentContext.baseContext
+        }
+    }
+
+    BackHandler(enabled = showAnalyticsConsent) { exitApp() }
+
     LaunchedEffect(refresh) {
         appState = PilotState.Loading
         if (authStore.token().isNullOrBlank()) {
@@ -620,17 +635,14 @@ private fun ComposePilotApp(
         visible = showAnalyticsConsent,
         title = if (zh) "允许基础使用统计？" else "Allow basic usage analytics?",
         message = if (zh) {
-            "Multi-Casual 只会上报 app_open 启动事件，用于统计用户量和日活。中国大陆用户使用友盟SDK，海外用户使用 PostHog SDK；SDK 可能按各自规则处理设备信息、Android ID、IP 地址和网络状态。我们不会采集页面浏览、聊天内容、文件内容、邮箱、Token 或精确位置。你可以选择不同意，应用仍可继续使用。"
+            "Multi-Casual 只会上报 app_open 启动事件，用于统计用户量和日活。中国大陆用户使用友盟SDK，海外用户使用 PostHog SDK；SDK 可能按各自规则处理设备信息、Android ID、IP 地址和网络状态。我们不会采集页面浏览、聊天内容、文件内容、邮箱、Token 或精确位置。不同意将退出应用。"
         } else {
-            "Multi-Casual only reports the app_open event to measure user count and daily active users. Mainland China uses the Umeng SDK, while global users use the PostHog SDK; each SDK may process device information, Android ID, IP address, and network state under its own policy. We do not collect page views, chat content, file content, email, tokens, or precise location. You can decline and still use the app."
+            "Multi-Casual only reports the app_open event to measure user count and daily active users. Mainland China uses the Umeng SDK, while global users use the PostHog SDK; each SDK may process device information, Android ID, IP address, and network state under its own policy. We do not collect page views, chat content, file content, email, tokens, or precise location. Declining exits the app."
         },
-        cancelText = if (zh) "不同意" else "Decline",
-        confirmText = if (zh) "同意并继续" else "Agree",
+        cancelText = if (zh) "不同意并退出" else "Decline and Exit",
+        confirmText = if (zh) "同意并继续使用" else "Agree and Continue",
         contentDescription = "Analytics Consent",
-        onDismissRequest = {
-            AppAnalytics.denyConsent(context)
-            showAnalyticsConsent = false
-        },
+        onDismissRequest = { exitApp() },
         onConfirm = {
             AppAnalytics.grantConsentAndInitialize(context)
             showAnalyticsConsent = false
@@ -740,7 +752,7 @@ private fun PilotLoginScreen(
                         textAlign = TextAlign.Center,
                     )
                     Text(
-                        text = if (zh) "输入邮箱获取验证码，和 Web/桌面端使用同一套官方登录服务。" else "Use your email code. This is the same official sign-in service as web and desktop.",
+                        text = if (zh) "输入邮箱获取验证码，和 Web/桌面端使用同一套邮箱验证码登录服务。" else "Use your email code. This is the same email-code sign-in service as web and desktop.",
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, lineHeight = 21.sp),
                         color = MulticaColors.Muted,
                         textAlign = TextAlign.Center,
@@ -844,16 +856,6 @@ private fun PilotLoginScreen(
                         )
                     }
                 }
-            }
-            item {
-                MulticaPillButton(
-                    text = if (zh) "用浏览器打开 Web 登录" else "Open Web Sign In",
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.MULTICA_WEB_BASE_URL}/login")))
-                    },
-                    tone = MulticaButtonTone.Ghost,
-                    contentDescription = "Login Open Web Sign In",
-                )
             }
         }
     }
@@ -1755,6 +1757,7 @@ private fun ComposePilotShell(
             PilotSearchPage(
                 api = api,
                 workspaceId = session.workspace.id,
+                workspaceSlug = session.workspace.slug,
                 zh = zh,
                 query = retainedSearchQuery,
                 onQueryChange = { retainedSearchQuery = it },
@@ -2003,6 +2006,7 @@ private fun PilotTabContent(
 private fun PilotSearchPage(
     api: ApiClient,
     workspaceId: String,
+    workspaceSlug: String,
     zh: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -2031,8 +2035,8 @@ private fun PilotSearchPage(
             val searchResult = withContext(Dispatchers.IO) {
                 runCatching {
                     PilotSearchData(
-                        issues = api.searchIssues(workspaceId, text, 20),
-                        projects = api.searchProjects(workspaceId, text, 10),
+                        issues = api.searchIssues(workspaceId, workspaceSlug, text, 20),
+                        projects = api.searchProjects(workspaceId, workspaceSlug, text, 10),
                         agents = runCatching { searchLocalAgents(api.agents(workspaceId), text) }.getOrElse { emptyList() },
                         skills = runCatching { searchLocalSkills(api.skills(workspaceId), text) }.getOrElse { emptyList() },
                     )
@@ -9481,7 +9485,7 @@ private fun PilotIssueDetail(
                 issueReferenceMessage = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {
-                        runCatching { api.searchIssues(workspaceId, identifier, 10) }
+                        runCatching { api.searchIssues(workspaceId, workspaceSlug, identifier, 10) }
                     }
                     result.onSuccess { issues ->
                         val match = issues.firstOrNull { it.identifier.equals(identifier, ignoreCase = true) }
@@ -9799,7 +9803,7 @@ private fun PilotIssueDetail(
             }
 
             fun sendNewComment() {
-                val content = newCommentDraft.trim()
+                val content = AgentMentionMarkdown.markdownFromDraft(newCommentDraft.trim(), data.agents)
                 if (sendingNewComment || content.isEmpty() && pendingCommentAttachments.isEmpty()) return
                 sendingNewComment = true
                 newCommentMessage = null
@@ -9820,8 +9824,10 @@ private fun PilotIssueDetail(
                 }
             }
 
-            fun sendReply(parentId: String) {
-                val content = replyDraft.trim()
+            fun sendReply(thread: IssueCommentThreads.Thread) {
+                val parentId = thread.root.id
+                val explicitContent = AgentMentionMarkdown.markdownFromDraft(replyDraft.trim(), data.agents)
+                val content = IssueCommentThreads.replyContentForThread(thread, explicitContent, data.agents)
                 if (sendingReply || (content.isEmpty() && pendingReplyAttachments.isEmpty())) return
                 sendingReply = true
                 replyMessage = null
@@ -9872,6 +9878,10 @@ private fun PilotIssueDetail(
                 ?.takeIf { it.isNotBlank() }
                 ?: data.issue.projectId?.takeIf { it.isNotBlank() }?.let { Models.shortId(it) }
                 ?: if (zh) "无项目" else "No project"
+            val commentThreads = IssueCommentThreads.build(data.comments, commentsDescending)
+            val replyingThread = replyingCommentId?.let { activeReplyId ->
+                commentThreads.firstOrNull { it.root.id == activeReplyId }
+            }
 
             PilotListPage(
                 title = "${data.issue.identifier} · ${Models.statusLabel(data.issue.status, zh)}",
@@ -9915,18 +9925,44 @@ private fun PilotIssueDetail(
                             contentDescription = "Issue Comment Bottom Haze Composer $WEB_SSOT_COMMENT_INPUT"
                         },
                     ) {
-                        IssueCommentInputBar(
-                            draft = newCommentDraft,
-                            pendingAttachments = pendingCommentAttachments,
-                            agents = data.agents,
-                            uploadingAttachment = uploadingCommentAttachment,
-                            sending = sendingNewComment,
-                            zh = zh,
-                            onDraftChange = { newCommentDraft = it },
-                            onAttach = { if (!uploadingCommentAttachment) commentAttachmentLauncher.launch("*/*") },
-                            onAttachImage = { if (!uploadingCommentAttachment) commentImageAttachmentLauncher.launch("image/*") },
-                            onSend = { sendNewComment() },
-                        )
+                        if (replyingThread != null) {
+                            IssueCommentReplyBox(
+                                parentId = replyingThread.root.id,
+                                draft = replyDraft,
+                                pendingAttachments = pendingReplyAttachments,
+                                agents = data.agents,
+                                uploadingAttachment = uploadingReplyAttachment,
+                                sending = sendingReply,
+                                zh = zh,
+                                bottomMode = true,
+                                onDraftChange = { replyDraft = it },
+                                onAttach = { if (!uploadingReplyAttachment) replyAttachmentLauncher.launch("*/*") },
+                                onAttachImage = { if (!uploadingReplyAttachment) replyImageAttachmentLauncher.launch("image/*") },
+                                onRemoveAttachment = { removeIndex ->
+                                    pendingReplyAttachments = pendingReplyAttachments.filterIndexed { index, _ -> index != removeIndex }
+                                },
+                                onCancel = {
+                                    replyingCommentId = null
+                                    replyDraft = ""
+                                    pendingReplyAttachments = emptyList()
+                                    replyMessage = null
+                                },
+                                onSend = { sendReply(replyingThread) },
+                            )
+                        } else {
+                            IssueCommentInputBar(
+                                draft = newCommentDraft,
+                                pendingAttachments = pendingCommentAttachments,
+                                agents = data.agents,
+                                uploadingAttachment = uploadingCommentAttachment,
+                                sending = sendingNewComment,
+                                zh = zh,
+                                onDraftChange = { newCommentDraft = it },
+                                onAttach = { if (!uploadingCommentAttachment) commentAttachmentLauncher.launch("*/*") },
+                                onAttachImage = { if (!uploadingCommentAttachment) commentImageAttachmentLauncher.launch("image/*") },
+                                onSend = { sendNewComment() },
+                            )
+                        }
                     }
                 },
             ) {
@@ -10110,166 +10146,158 @@ private fun PilotIssueDetail(
                         )
                     }
                 }
-                val comments = if (commentsDescending) {
-                    data.comments.sortedByDescending { it.createdAt }
-                } else {
-                    data.comments.sortedBy { it.createdAt }
-                }
-                if (comments.isEmpty()) {
+                val threads = commentThreads
+                if (threads.isEmpty()) {
                     item { IssueDetailCommentsWebEmptyState(zh = zh) }
                 }
                 val baseVisibleCount = if (showExpandedCommentHistory) 8 else 2
                 val highlightedIndex = highlightCommentId?.let { targetId ->
-                    comments.indexOfFirst { it.id == targetId || it.parentId == targetId }.takeIf { it >= 0 }
+                    threads.indexOfFirst { thread ->
+                        thread.root.id == targetId || thread.replies.any { it.id == targetId }
+                    }.takeIf { it >= 0 }
                 }
-                val visibleCommentCount = maxOf(
+                val visibleThreadCount = maxOf(
                     baseVisibleCount,
                     highlightedIndex?.plus(1) ?: 0,
-                ).coerceAtMost(comments.size)
-                val visibleComments = comments.take(visibleCommentCount)
-                items(visibleComments) { comment ->
-                    val content = clean(comment.content)
-                    val authorName = Models.commentAuthorDisplayName(comment, data.members, data.agents, currentUser)
-                    val authorAvatarUrl = Models.commentAuthorAvatarUrl(comment, data.members, data.agents, currentUser)
-                    IssueCommentCard(
-                        comment = comment,
-                        authorName = authorName,
-                        authorAvatarUrl = authorAvatarUrl,
-                        authorAgentStatus = commentAuthorAgentStatus(comment, data.agents),
-                        members = data.members,
-                        agents = data.agents,
-                        currentUser = currentUser,
-                        onIssueIdClick = { onOpenIssue(it) },
-                        onIssueReferenceClick = { openIssueReference(it) },
-                        expandedActions = expandedCommentActionsId == comment.id,
-                        contentExpanded = comment.id in expandedCommentContentIds,
-                        highlighted = comment.id == highlightCommentId,
-                        zh = zh,
-                        onToggleActions = {
-                            expandedCommentActionsId = if (expandedCommentActionsId == comment.id) null else comment.id
-                        },
-                        onToggleContent = {
-                            expandedCommentContentIds = if (comment.id in expandedCommentContentIds) {
-                                expandedCommentContentIds - comment.id
-                            } else {
-                                expandedCommentContentIds + comment.id
+                ).coerceAtMost(threads.size)
+                val visibleThreads = threads.take(visibleThreadCount)
+                items(visibleThreads) { thread ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics(mergeDescendants = false) {
+                                contentDescription = "Issue Comment Thread ${thread.root.id}"
+                            },
+                    ) {
+                        (listOf(thread.root) + thread.replies).forEach { comment ->
+                            val authorName = Models.commentAuthorDisplayName(comment, data.members, data.agents, currentUser)
+                            val authorAvatarUrl = Models.commentAuthorAvatarUrl(comment, data.members, data.agents, currentUser)
+                            val isThreadReply = comment.id != thread.root.id
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = if (isThreadReply) 28.dp else 0.dp),
+                            ) {
+                                IssueCommentCard(
+                                    comment = comment,
+                                    authorName = authorName,
+                                    authorAvatarUrl = authorAvatarUrl,
+                                    authorAgentStatus = commentAuthorAgentStatus(comment, data.agents),
+                                    members = data.members,
+                                    agents = data.agents,
+                                    currentUser = currentUser,
+                                    onIssueIdClick = { onOpenIssue(it) },
+                                    onIssueReferenceClick = { openIssueReference(it) },
+                                    expandedActions = expandedCommentActionsId == comment.id,
+                                    contentExpanded = comment.id in expandedCommentContentIds,
+                                    highlighted = comment.id == highlightCommentId,
+                                    zh = zh,
+                                    onToggleActions = {
+                                        expandedCommentActionsId = if (expandedCommentActionsId == comment.id) null else comment.id
+                                    },
+                                    onToggleContent = {
+                                        expandedCommentContentIds = if (comment.id in expandedCommentContentIds) {
+                                            expandedCommentContentIds - comment.id
+                                        } else {
+                                            expandedCommentContentIds + comment.id
+                                        }
+                                    },
+                                    onReplyAction = {
+                                        replyingCommentId = if (replyingCommentId == thread.root.id) null else thread.root.id
+                                        replyDraft = ""
+                                        pendingReplyAttachments = emptyList()
+                                        editingCommentId = null
+                                        editingCommentContent = ""
+                                        pendingDeleteComment = null
+                                        replyMessage = null
+                                    },
+                                    onEditAction = {
+                                        editingCommentId = comment.id
+                                        editingCommentContent = comment.content
+                                        pendingDeleteComment = null
+                                        replyingCommentId = null
+                                        replyDraft = ""
+                                    },
+                                    onDeleteAction = {
+                                        pendingDeleteComment = comment
+                                        editingCommentId = null
+                                        editingCommentContent = ""
+                                        replyingCommentId = null
+                                        replyDraft = ""
+                                    },
+                                )
+                                if (comment.attachments.isNotEmpty()) {
+                                    CompactInfoPanel(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 38.dp, bottom = 8.dp),
+                                    ) {
+                                        comment.attachments.forEachIndexed { index, attachment ->
+                                            CommentAttachmentWebDenseRow(
+                                                attachment = attachment,
+                                                zh = zh,
+                                                showDivider = index < comment.attachments.lastIndex,
+                                                onOpen = { openAttachment(attachment) },
+                                            )
+                                        }
+                                    }
+                                }
+                                if (editingCommentId == comment.id) {
+                                    MulticaTextField(
+                                        value = editingCommentContent,
+                                        onValueChange = { editingCommentContent = it },
+                                        label = if (zh) "编辑评论" else "Edit comment",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .semantics { contentDescription = "Issue Comment Edit Field ${comment.id}" },
+                                        minLines = 3,
+                                        maxLines = 8,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        MulticaPillButton(
+                                            text = if (zh) "取消" else "Cancel",
+                                            onClick = {
+                                                editingCommentId = null
+                                                editingCommentContent = ""
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            tone = MulticaButtonTone.Ghost,
+                                        )
+                                        MulticaPillButton(
+                                            text = if (zh) "保存评论" else "Save Comment",
+                                            onClick = {
+                                                val nextContent = editingCommentContent.trim()
+                                                if (nextContent.isEmpty()) return@MulticaPillButton
+                                                runCommentMutation { api.updateComment(workspaceId, comment.id, nextContent) }
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            tone = MulticaButtonTone.Primary,
+                                        )
+                                    }
+                                }
+                                if (pendingDeleteComment?.id == comment.id) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 38.dp, bottom = 8.dp)
+                                            .semantics(mergeDescendants = true) {
+                                                contentDescription = "Issue Comment Delete Cupertino Alert Preview Row ${comment.id}"
+                                            },
+                                    )
+                                }
                             }
-                        },
-                        onReplyAction = {
-                            replyingCommentId = if (replyingCommentId == comment.id) null else comment.id
-                            replyDraft = ""
-                            pendingReplyAttachments = emptyList()
-                            editingCommentId = null
-                            editingCommentContent = ""
-                            pendingDeleteComment = null
-                            replyMessage = null
-                        },
-                        onEditAction = {
-                            editingCommentId = comment.id
-                            editingCommentContent = comment.content
-                            pendingDeleteComment = null
-                            replyingCommentId = null
-                            replyDraft = ""
-                        },
-                        onDeleteAction = {
-                            pendingDeleteComment = comment
-                            editingCommentId = null
-                            editingCommentContent = ""
-                            replyingCommentId = null
-                            replyDraft = ""
-                        },
-                    )
-                    if (replyingCommentId == comment.id) {
-                        IssueCommentReplyBox(
-                            parentId = comment.id,
-                            draft = replyDraft,
-                            pendingAttachments = pendingReplyAttachments,
-                            agents = data.agents,
-                            uploadingAttachment = uploadingReplyAttachment,
-                            sending = sendingReply,
-                            zh = zh,
-                            onDraftChange = { replyDraft = it },
-                            onAttach = { if (!uploadingReplyAttachment) replyAttachmentLauncher.launch("*/*") },
-                            onAttachImage = { if (!uploadingReplyAttachment) replyImageAttachmentLauncher.launch("image/*") },
-                            onRemoveAttachment = { removeIndex ->
-                                pendingReplyAttachments = pendingReplyAttachments.filterIndexed { index, _ -> index != removeIndex }
-                            },
-                            onCancel = {
-                                replyingCommentId = null
-                                replyDraft = ""
-                                pendingReplyAttachments = emptyList()
-                                replyMessage = null
-                            },
-                            onSend = { sendReply(comment.id) },
-                        )
-                    }
-                    if (!replyMessage.isNullOrBlank() && replyingCommentId == comment.id) {
+                        }
+                        if (!replyMessage.isNullOrBlank() && replyingCommentId == thread.root.id) {
                         PilotInlineResultState(
                             message = replyMessage.orEmpty(),
                             isError = pilotInlineResultIsError(replyMessage.orEmpty()),
                             contentDescription = "Issue Detail Reply Result Web Banner",
                         )
-                    }
-                    if (comment.attachments.isNotEmpty()) {
-                        CompactInfoPanel(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 38.dp, bottom = 8.dp),
-                        ) {
-                            comment.attachments.forEachIndexed { index, attachment ->
-                                CommentAttachmentWebDenseRow(
-                                    attachment = attachment,
-                                    zh = zh,
-                                    showDivider = index < comment.attachments.lastIndex,
-                                    onOpen = { openAttachment(attachment) },
-                                )
-                            }
                         }
                     }
-                    if (editingCommentId == comment.id) {
-                        MulticaTextField(
-                            value = editingCommentContent,
-                            onValueChange = { editingCommentContent = it },
-                            label = if (zh) "编辑评论" else "Edit comment",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics { contentDescription = "Issue Comment Edit Field ${comment.id}" },
-                            minLines = 3,
-                            maxLines = 8,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            MulticaPillButton(
-                                text = if (zh) "取消" else "Cancel",
-                                onClick = {
-                                    editingCommentId = null
-                                    editingCommentContent = ""
-                                },
-                                modifier = Modifier.weight(1f),
-                                tone = MulticaButtonTone.Ghost,
-                            )
-                            MulticaPillButton(
-                                text = if (zh) "保存评论" else "Save Comment",
-                                onClick = {
-                                    val nextContent = editingCommentContent.trim()
-                                    if (nextContent.isEmpty()) return@MulticaPillButton
-                                    runCommentMutation { api.updateComment(workspaceId, comment.id, nextContent) }
-                                },
-                                modifier = Modifier.weight(1f),
-                                tone = MulticaButtonTone.Primary,
-                            )
-                        }
-                    }
-                    if (pendingDeleteComment?.id == comment.id) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 38.dp, bottom = 8.dp)
-                                .semantics(mergeDescendants = true) {
-                                    contentDescription = "Issue Comment Delete Cupertino Alert Preview Row ${comment.id}"
-                                },
-                        )
-                    }
-                    if (!commentMessage.isNullOrBlank()) {
+                }
+                if (!commentMessage.isNullOrBlank()) {
+                    item {
                         PilotInlineResultState(
                             message = commentMessage.orEmpty(),
                             isError = pilotInlineResultIsError(commentMessage.orEmpty()),
@@ -10277,34 +10305,34 @@ private fun PilotIssueDetail(
                         )
                     }
                 }
-                if (comments.size > visibleComments.size) {
+                if (threads.size > visibleThreads.size) {
                     item {
                         IssueDetailWebActionRow(
                             eyebrow = if (zh) "评论历史" else "Comment history",
                             title = if (zh) {
                                 if (showExpandedCommentHistory) {
-                                    "已显示最新 ${visibleComments.size} 条，点此收起"
+                                    "已显示最新 ${visibleThreads.size} 个帖子，点此收起"
                                 } else {
-                                    "已优先显示最新 ${visibleComments.size} 条，点此查看更多"
+                                    "已优先显示最新 ${visibleThreads.size} 个帖子，点此查看更多"
                                 }
                             } else {
                                 if (showExpandedCommentHistory) {
-                                    "Showing latest ${visibleComments.size}; tap to collapse"
+                                    "Showing latest ${visibleThreads.size} threads; tap to collapse"
                                 } else {
-                                    "Showing latest ${visibleComments.size}; tap for more"
+                                    "Showing latest ${visibleThreads.size} threads; tap for more"
                                 }
                             },
                             subtitle = if (zh) {
                                 if (showExpandedCommentHistory) {
-                                    "还有 ${comments.size - visibleComments.size} 条更早评论"
+                                    "还有 ${threads.size - visibleThreads.size} 个更早帖子"
                                 } else {
-                                    "还有 ${comments.size - visibleComments.size} 条历史评论"
+                                    "还有 ${threads.size - visibleThreads.size} 个历史帖子"
                                 }
                             } else {
                                 if (showExpandedCommentHistory) {
-                                    "${comments.size - visibleComments.size} older comments"
+                                    "${threads.size - visibleThreads.size} older threads"
                                 } else {
-                                    "${comments.size - visibleComments.size} older comments"
+                                    "${threads.size - visibleThreads.size} older threads"
                                 }
                             },
                             icon = if (showExpandedCommentHistory) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
@@ -10716,6 +10744,7 @@ private fun IssueCommentReplyBox(
     uploadingAttachment: Boolean,
     sending: Boolean,
     zh: Boolean,
+    bottomMode: Boolean = false,
     onDraftChange: (String) -> Unit,
     onAttach: () -> Unit,
     onAttachImage: () -> Unit,
@@ -10728,6 +10757,7 @@ private fun IssueCommentReplyBox(
     val focusRequester = remember(parentId) { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val replyActionModifier = Modifier.size(42.dp)
     val mentionAgents = remember(agents, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
         agents
@@ -10750,7 +10780,7 @@ private fun IssueCommentReplyBox(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 38.dp, bottom = 8.dp)
+            .padding(start = if (bottomMode) 0.dp else 38.dp, bottom = if (bottomMode) 0.dp else 8.dp)
             .semantics(mergeDescendants = false) { contentDescription = "Issue Comment Web Reply Editor $parentId" },
         shape = RoundedCornerShape(14.dp),
         color = MulticaColors.Surface.copy(alpha = 0.82f),
@@ -10796,25 +10826,28 @@ private fun IssueCommentReplyBox(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MulticaPillButton(
-                    text = if (uploadingAttachment) "..." else if (zh) "图片" else "Image",
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.Image,
+                    contentDescription = "Issue Comment Reply Attach Image",
                     onClick = onAttachImage,
                     tone = MulticaButtonTone.Secondary,
-                    contentDescription = "Issue Comment Reply Attach Image",
                     enabled = !uploadingAttachment,
+                    modifier = replyActionModifier,
                 )
-                MulticaPillButton(
-                    text = "+",
-                    onClick = onAttach,
-                    tone = MulticaButtonTone.Ghost,
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.AttachFile,
                     contentDescription = "Issue Comment Reply Attach",
+                    onClick = onAttach,
+                    tone = MulticaButtonTone.Secondary,
                     enabled = !uploadingAttachment,
+                    modifier = replyActionModifier,
                 )
-                MulticaPillButton(
-                    text = "@",
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.AlternateEmail,
+                    contentDescription = "Issue Comment Reply Agent Mention",
                     onClick = { mentionPickerOpen = !mentionPickerOpen },
                     tone = if (mentionPickerOpen) MulticaButtonTone.Primary else MulticaButtonTone.Secondary,
-                    contentDescription = "Issue Comment Reply Agent Mention",
+                    modifier = replyActionModifier,
                 )
                 MulticaPillButton(
                     text = if (zh) "取消" else "Cancel",
@@ -10831,7 +10864,7 @@ private fun IssueCommentReplyBox(
                     onClick = onSend,
                     tone = MulticaButtonTone.Primary,
                     enabled = !sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty()),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.18f).widthIn(min = 88.dp),
                 )
             }
             if (mentionPickerOpen) {
@@ -10867,7 +10900,7 @@ private fun IssueCommentReplyBox(
                                 agent = agent,
                                 contentDescription = "Issue Comment Reply Mention Agent Row ${agent.id}",
                                 onClick = {
-                                    val insertion = AgentMentionMarkdown.markdown(agent.name, agent.id)
+                                    val insertion = AgentMentionMarkdown.displayText(agent.name, agent.id)
                                     val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
                                     onDraftChange(draft + separator + insertion + " ")
                                     mentionPickerOpen = false
@@ -10935,7 +10968,7 @@ private fun IssueMentionAgentWebRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = AgentMentionMarkdown.markdown(agent.name, agent.id),
+                    text = AgentMentionMarkdown.displayText(agent.name, agent.id),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp, fontFamily = FontFamily.Monospace),
                     color = MulticaColors.Muted,
                     maxLines = 1,
@@ -11110,7 +11143,7 @@ private fun IssueCommentInputBar(
                                 agent = agent,
                                 contentDescription = "Issue Comment Mention Agent Row ${agent.id}",
                                 onClick = {
-                                    val insertion = AgentMentionMarkdown.markdown(agent.name, agent.id)
+                                    val insertion = AgentMentionMarkdown.displayText(agent.name, agent.id)
                                     val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
                                     onDraftChange(draft + separator + insertion + " ")
                                     mentionPickerOpen = false
@@ -26866,8 +26899,31 @@ private fun agentTasksSummary(agent: Models.Agent, data: PilotAgentSettingsData,
 
 private fun shortDate(value: String?): String {
     val text = clean(value)
+    val timestampMillis = parseTimestampMillis(text)
+    if (timestampMillis != null) {
+        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+        formatter.timeZone = TimeZone.getDefault()
+        return formatter.format(Date(timestampMillis))
+    }
     if (text.length >= 16) return text.substring(0, 16).replace('T', ' ')
     return text
+}
+
+private fun parseTimestampMillis(value: String?): Long? {
+    val text = clean(value)
+    if (text.isBlank() || !text.contains('T')) return null
+    val patterns = listOf(
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd'T'HH:mm:ssXXX",
+    )
+    for (pattern in patterns) {
+        val formatter = SimpleDateFormat(pattern, Locale.US)
+        if (pattern.endsWith("'Z'")) formatter.timeZone = TimeZone.getTimeZone("UTC")
+        val parsed = runCatching { formatter.parse(text)?.time }.getOrNull()
+        if (parsed != null) return parsed
+    }
+    return null
 }
 
 private fun relativeDate(value: String?, zh: Boolean): String {
