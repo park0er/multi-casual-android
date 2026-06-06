@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AssignmentInd
@@ -61,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedback
@@ -1032,7 +1034,7 @@ fun MulticaCupertinoActionSheet(
     title: String,
     message: String? = null,
     items: List<MulticaCupertinoActionSheetItem>,
-    cancelText: String,
+    cancelText: String? = null,
     onDismissRequest: () -> Unit,
 ) {
     if (!visible) return
@@ -1125,19 +1127,21 @@ fun MulticaCupertinoActionSheet(
                     }
                 }
             }
-            action(
-                onClick = {
-                    performMulticaTapFeedback(haptic)
-                    onDismissRequest()
-                },
-                style = AlertActionStyle.Cancel,
-                enabled = true,
-            ) {
-                Text(
-                    text = cancelText,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    color = MulticaColors.Accent,
-                )
+            if (!cancelText.isNullOrBlank()) {
+                action(
+                    onClick = {
+                        performMulticaTapFeedback(haptic)
+                        onDismissRequest()
+                    },
+                    style = AlertActionStyle.Cancel,
+                    enabled = true,
+                ) {
+                    Text(
+                        text = cancelText,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                        color = MulticaColors.Accent,
+                    )
+                }
             }
         },
     )
@@ -1184,19 +1188,23 @@ fun MulticaCupertinoAlertDialog(
             )
         },
         buttons = {
-            action(
-                onClick = {
-                    performMulticaTapFeedback(haptic)
-                    onDismissRequest()
-                },
-                style = AlertActionStyle.Cancel,
-                enabled = true,
-            ) {
-                Text(
-                    text = cancelText,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                    color = MulticaColors.Accent,
-                )
+            if (!cancelText.isNullOrBlank()) {
+                action(
+                    onClick = {
+                        performMulticaTapFeedback(haptic)
+                        onDismissRequest()
+                    },
+                    style = AlertActionStyle.Cancel,
+                    enabled = true,
+                ) {
+                    Text(
+                        text = cancelText,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                        color = MulticaColors.Accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             action(
                 onClick = {
@@ -1208,8 +1216,10 @@ fun MulticaCupertinoAlertDialog(
             ) {
                 Text(
                     text = confirmText,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                     color = if (destructive) MulticaColors.Danger else MulticaColors.Accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         },
@@ -1604,6 +1614,7 @@ fun MulticaCupertinoTextField(
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
 ) {
     val fieldDescription = contentDescription ?: "Multica Cupertino Text Field $label"
+    val centerSingleLineContent = singleLine || minLines <= 1
     val fieldModifier = Modifier
         .fillMaxWidth()
         .semantics { this.contentDescription = fieldDescription }
@@ -1620,22 +1631,52 @@ fun MulticaCupertinoTextField(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        CupertinoBorderedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = fieldModifier.heightIn(min = if (singleLine) 44.dp else 48.dp),
-            enabled = enabled,
-            singleLine = singleLine,
-            minLines = minLines,
-            maxLines = maxLines,
-            placeholder = {
-                if (placeholder.isNotBlank()) {
-                    Text(placeholder, color = MulticaColors.TextTertiary)
-                }
-            },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 21.sp, color = MulticaColors.TextPrimary),
-            shape = RoundedCornerShape(10.dp),
+        val fieldShape = RoundedCornerShape(10.dp)
+        val fieldTextStyle = MaterialTheme.typography.bodyLarge.copy(
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
+            color = if (enabled) MulticaColors.TextPrimary else MulticaColors.Muted,
         )
+        Box(
+            modifier = fieldModifier
+                .heightIn(min = if (centerSingleLineContent) 44.dp else 48.dp)
+                .clip(fieldShape)
+                .background(if (enabled) MulticaColors.Surface else MulticaColors.Surface.copy(alpha = 0.56f))
+                .border(1.dp, MulticaColors.Border.copy(alpha = if (enabled) 0.72f else 0.42f), fieldShape)
+                .padding(horizontal = 12.dp, vertical = if (centerSingleLineContent) 0.dp else 10.dp),
+            contentAlignment = if (centerSingleLineContent) Alignment.CenterStart else Alignment.TopStart,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(),
+                enabled = enabled,
+                singleLine = singleLine,
+                minLines = minLines,
+                maxLines = maxLines,
+                textStyle = fieldTextStyle,
+                cursorBrush = SolidColor(MulticaColors.Accent),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (centerSingleLineContent) Alignment.CenterStart else Alignment.TopStart,
+                    ) {
+                        if (value.isEmpty() && placeholder.isNotBlank()) {
+                            Text(
+                                text = placeholder,
+                                style = fieldTextStyle,
+                                color = MulticaColors.TextTertiary,
+                                maxLines = if (singleLine) 1 else maxLines,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -2031,7 +2072,7 @@ fun MulticaErrorState(
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp),
                 color = MulticaColors.Muted,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }

@@ -151,7 +151,6 @@ public final class MainActivity extends Activity {
         EditText email = input("you@example.com");
         email.setInputType(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         Button continueButton = button(t("continue"), BLUE, 0xFFFFFFFF);
-        Button google = button(t("google"), 0xFFE5E7EB, TEXT);
 
         root.addView(spacer(30));
         root.addView(mark);
@@ -161,8 +160,6 @@ public final class MainActivity extends Activity {
         root.addView(email, matchWrap());
         root.addView(spacer(12));
         root.addView(continueButton, matchWrap());
-        root.addView(spacer(12));
-        root.addView(google, matchWrap());
 
         continueButton.setOnClickListener(v -> {
             String value = email.getText().toString().trim();
@@ -179,7 +176,6 @@ public final class MainActivity extends Activity {
                 toast(t("sendCodeFailed"));
             });
         });
-        google.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.MULTICA_WEB_BASE_URL + "/login"))));
         setContentView(root);
     }
 
@@ -2193,7 +2189,6 @@ public final class MainActivity extends Activity {
                 case "signIn": return "登录 Multi-Casual";
                 case "signInHint": return "输入邮箱获取登录验证码";
                 case "continue": return "继续";
-                case "google": return "使用 Google 继续";
                 case "emailRequired": return "请输入邮箱";
                 case "sendCodeFailed": return "验证码发送失败";
                 case "otpTitle": return "输入验证码";
@@ -2306,7 +2301,6 @@ public final class MainActivity extends Activity {
                 case "signIn": return "Sign in to Multi-Casual";
                 case "signInHint": return "Enter your email to get a login code";
                 case "continue": return "Continue";
-                case "google": return "Continue with Google";
                 case "emailRequired": return "Email is required";
                 case "sendCodeFailed": return "Failed to send code";
                 case "otpTitle": return "Enter code";
