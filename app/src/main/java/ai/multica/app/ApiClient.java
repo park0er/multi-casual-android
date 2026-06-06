@@ -748,6 +748,18 @@ final class ApiClient {
         return parseArray(extractArray(json, "agents"), Models.Agent::new);
     }
 
+
+    List<Models.Squad> squads(String workspaceId) throws Exception {
+        return squads(workspaceId, false);
+    }
+
+    List<Models.Squad> squads(String workspaceId, boolean includeArchived) throws Exception {
+        JSONObject query = query(null, "workspace_id", workspaceId);
+        if (includeArchived) query.put("include_archived", "true");
+        JSONObject json = requestObject("GET", "/api/squads", query, null);
+        return parseArray(extractArray(json, "squads"), Models.Squad::new);
+    }
+
     List<Models.Runtime> runtimes(String workspaceId) throws Exception {
         JSONObject json = requestObject("GET", "/api/runtimes", query(null, "workspace_id", workspaceId), null);
         return parseArray(extractArray(json, "runtimes"), Models.Runtime::new);
