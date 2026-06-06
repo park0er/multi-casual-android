@@ -30,6 +30,17 @@ def umengPublicAppKey = configValue("multicaUmengPublicAppKey", "MULTICA_UMENG_P
 def postHogPublicApiKey = configValue("multicaPostHogPublicApiKey", "MULTICA_POSTHOG_PUBLIC_API_KEY", "")
 def postHogPublicHost = configValue("multicaPostHogPublicHost", "MULTICA_POSTHOG_PUBLIC_HOST", "https://us.i.posthog.com")
 def analyticsRoute = configValue("multicaAnalyticsRoute", "MULTICA_ANALYTICS_ROUTE", "auto")
+def releaseStoreFilePath = configValue("multicaReleaseStoreFile", "MULTICA_RELEASE_STORE_FILE", "")
+def releaseStorePassword = configValue("multicaReleaseStorePassword", "MULTICA_RELEASE_STORE_PASSWORD", "")
+def releaseKeyAlias = configValue("multicaReleaseKeyAlias", "MULTICA_RELEASE_KEY_ALIAS", "")
+def releaseKeyPassword = configValue("multicaReleaseKeyPassword", "MULTICA_RELEASE_KEY_PASSWORD", "")
+def hasReleaseSigning = !releaseStoreFilePath.isBlank()
+        && !releaseStorePassword.isBlank()
+        && !releaseKeyAlias.isBlank()
+        && !releaseKeyPassword.isBlank()
+def releaseStoreFile = releaseStoreFilePath.isBlank()
+        ? null
+        : (new File(releaseStoreFilePath).isAbsolute() ? file(releaseStoreFilePath) : rootProject.file(releaseStoreFilePath))
 
 android {
     namespace "ai.multica.app"
@@ -40,8 +51,8 @@ android {
         applicationId "ai.multicasual.app"
         minSdk 24
         targetSdk 36
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "0.1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -60,6 +71,18 @@ android {
     }
 
     flavorDimensions "distribution"
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile releaseStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     productFlavors {
         create("public") {
             dimension "distribution"
@@ -87,6 +110,9 @@ android {
 
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }

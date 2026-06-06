@@ -20,6 +20,37 @@ final class AgentMentionMarkdown {
         return "[@" + cleanName + "](mention://agent/" + agentId + ")";
     }
 
+    static String displayText(String name, String agentId) {
+        String cleanName = cleanName(name);
+        if (cleanName.isEmpty()) cleanName = Models.shortId(agentId);
+        return "@" + cleanName;
+    }
+
+    static String markdownFromDraft(String draft, List<Models.Agent> agents) {
+        String content = draft == null ? "" : draft.trim();
+        if (content.isEmpty() || content.contains("mention://agent/") || agents == null || agents.isEmpty()) {
+            return content;
+        }
+        ArrayList<Models.Agent> sortedAgents = new ArrayList<>(agents);
+        sortedAgents.sort((left, right) -> Integer.compare(
+                displayText(right.name, right.id).length(),
+                displayText(left.name, left.id).length()
+        ));
+        String normalized = content;
+        for (Models.Agent agent : sortedAgents) {
+            String display = displayText(agent.name, agent.id);
+            if (display.length() <= 1) continue;
+            normalized = normalized.replace(display, markdown(agent.name, agent.id));
+        }
+        return normalized;
+    }
+
+    private static String cleanName(String name) {
+        if (name == null) return "";
+        String trimmed = name.trim();
+        return "null".equalsIgnoreCase(trimmed) ? "" : trimmed;
+    }
+
     private AgentMentionMarkdown() {
     }
 }
@@ -129,6 +160,127 @@ final class IssueCommentRichText {
     }
 
     private IssueCommentRichText() {
+    }
+}
+
+final class IssueCommentThreads {
+    static final class Thread {
+        final Models.Comment root;
+        final List<Models.Comment> replies;
+
+        Thread(Models.Comment root, List<Models.Comment> replies) {
+            this.root = root;
+            this.replies = Collections.unmodifiableList(replies);
+        }
+    }
+
+    static List<Thread> build(List<Models.Comment> comments, boolean descending) {
+        LinkedHashMap<String, Models.Comment> byId = new LinkedHashMap<>();
+        for (Models.Comment comment : comments) {
+            if (comment != null && !clean(comment.id).isEmpty()) byId.put(comment.id, comment);
+        }
+
+        LinkedHashMap<String, ArrayList<Models.Comment>> repliesByRoot = new LinkedHashMap<>();
+        ArrayList<Models.Comment> roots = new ArrayList<>();
+        for (Models.Comment comment : comments) {
+            if (comment == null) continue;
+            Models.Comment root = rootFor(comment, byId);
+            if (root == comment || !byId.containsKey(clean(root.id))) {
+                if (!roots.contains(comment)) roots.add(comment);
+                repliesByRoot.putIfAbsent(clean(comment.id), new ArrayList<>());
+            } else {
+                repliesByRoot.putIfAbsent(clean(root.id), new ArrayList<>());
+                repliesByRoot.get(clean(root.id)).add(comment);
+            }
+        }
+
+        roots.sort((left, right) -> descending
+                ? compareCreatedAt(right, left)
+                : compareCreatedAt(left, right));
+        ArrayList<Thread> threads = new ArrayList<>();
+        for (Models.Comment root : roots) {
+            ArrayList<Models.Comment> replies = repliesByRoot.getOrDefault(clean(root.id), new ArrayList<>());
+            replies.sort(IssueCommentThreads::compareCreatedAt);
+            threads.add(new Thread(root, replies));
+        }
+        return threads;
+    }
+
+    static List<String> replyIds(Thread thread) {
+        ArrayList<String> ids = new ArrayList<>();
+        if (thread == null) return ids;
+        for (Models.Comment reply : thread.replies) ids.add(reply.id);
+        return ids;
+    }
+
+    static String replyContentForThread(Thread thread, String draft, List<Models.Agent> agents) {
+        String content = clean(draft);
+        if (content.contains("mention://agent/")) return content;
+        String agentId = firstAgentParticipantId(thread);
+        if (agentId.isEmpty()) return content;
+        String mention = AgentMentionMarkdown.markdown(agentName(agentId, agents), agentId);
+        return content.isEmpty() ? mention : mention + "\n\n" + content;
+    }
+
+    private static Models.Comment rootFor(Models.Comment comment, Map<String, Models.Comment> byId) {
+        Models.Comment current = comment;
+        ArrayList<String> seen = new ArrayList<>();
+        while (current != null && !isRoot(current)) {
+            String parentId = clean(current.parentId);
+            if (seen.contains(parentId)) return comment;
+            seen.add(parentId);
+            Models.Comment parent = byId.get(parentId);
+            if (parent == null) return comment;
+            current = parent;
+        }
+        return current == null ? comment : current;
+    }
+
+    private static String firstAgentParticipantId(Thread thread) {
+        if (thread == null) return "";
+        String rootAgentId = agentParticipantId(thread.root);
+        if (!rootAgentId.isEmpty()) return rootAgentId;
+        for (Models.Comment reply : thread.replies) {
+            String agentId = agentParticipantId(reply);
+            if (!agentId.isEmpty()) return agentId;
+        }
+        return "";
+    }
+
+    private static String agentParticipantId(Models.Comment comment) {
+        if (comment == null || !"agent".equalsIgnoreCase(clean(comment.authorType))) return "";
+        return clean(comment.authorId);
+    }
+
+    private static String agentName(String agentId, List<Models.Agent> agents) {
+        if (agents != null) {
+            for (Models.Agent agent : agents) {
+                if (agentId.equals(agent.id)) return clean(agent.name);
+            }
+        }
+        return Models.shortId(agentId);
+    }
+
+    private static boolean isRoot(Models.Comment comment) {
+        String parentId = clean(comment.parentId);
+        return parentId.isEmpty() || "null".equalsIgnoreCase(parentId);
+    }
+
+    private static int compareCreatedAt(Models.Comment left, Models.Comment right) {
+        String leftCreatedAt = left == null ? "" : clean(left.createdAt);
+        String rightCreatedAt = right == null ? "" : clean(right.createdAt);
+        int compared = leftCreatedAt.compareTo(rightCreatedAt);
+        if (compared != 0) return compared;
+        return clean(left == null ? "" : left.id).compareTo(clean(right == null ? "" : right.id));
+    }
+
+    private static String clean(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return "null".equalsIgnoreCase(trimmed) ? "" : trimmed;
+    }
+
+    private IssueCommentThreads() {
     }
 }
 
