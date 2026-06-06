@@ -111,6 +111,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -390,6 +391,7 @@ private data class PilotIssueFormOptions(
 private data class PilotChatMessagesData(
     val messages: List<Models.ChatMessage>,
     val pendingTask: Models.ChatPendingTask,
+    val agents: List<Models.Agent>,
 )
 
 private data class PilotChatSessionsData(
@@ -1817,6 +1819,7 @@ private fun ComposePilotShell(
                 session = activeChat,
                 zh = zh,
                 onBack = { chatSession = null },
+                onSessionChanged = { chatSession = it },
                 onArchived = {
                     chatSession = null
                     chatOpen = false
@@ -2969,32 +2972,6 @@ private fun InlineInboxAction(
 }
 
 @Composable
-private fun ChatNewSessionWebPanel(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val shape = RoundedCornerShape(MulticaVisualTokens.CardRadius)
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = "Chat New Session Web Panel" },
-        shape = shape,
-        color = MulticaColors.Surface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MulticaColors.Border.copy(alpha = 0.70f), shape)
-                .padding(horizontal = 12.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = content,
-        )
-    }
-}
-
-@Composable
 private fun ChatSessionListWebPanel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
@@ -3029,12 +3006,7 @@ private fun PilotChatSessions(
 ) {
     var state by remember(workspaceId) { mutableStateOf<Result<PilotChatSessionsData>?>(null) }
     var refresh by remember(workspaceId) { mutableIntStateOf(0) }
-    var title by remember(workspaceId) { mutableStateOf("") }
-    var selectedAgentId by remember(workspaceId) { mutableStateOf<String?>(null) }
-    var agentPickerOpen by remember(workspaceId) { mutableStateOf(false) }
-    var agentQuery by remember(workspaceId) { mutableStateOf("") }
     var showAllSessions by remember(workspaceId) { mutableStateOf(false) }
-    var showCreateForm by remember(workspaceId) { mutableStateOf(false) }
     var creating by remember(workspaceId) { mutableStateOf(false) }
     var deletingSessionId by remember(workspaceId) { mutableStateOf<String?>(null) }
     var actionText by remember(workspaceId) { mutableStateOf<String?>(null) }
@@ -3053,24 +3025,17 @@ private fun PilotChatSessions(
                 )
             }
         }
-        loaded.onSuccess { data ->
-            if (selectedAgentId == null || data.agents.none { it.id == selectedAgentId }) {
-                selectedAgentId = data.agents.firstOrNull()?.id
-            }
-        }
         state = loaded
     }
 
     fun createSession(data: PilotChatSessionsData) {
         if (creating) return
-        val agent = data.agents.firstOrNull { it.id == selectedAgentId } ?: data.agents.firstOrNull()
+        val agent = data.agents.firstOrNull()
         if (agent == null) {
             actionText = if (zh) "请先创建 Agent" else "Create an agent first"
             return
         }
-        val sessionTitle = title.trim().ifBlank {
-            if (zh) "新的聊天" else "New Chat"
-        }
+        val sessionTitle = ChatExperiencePolicy.newChatInitialTitle()
         creating = true
         actionText = null
         scope.launch {
@@ -3079,9 +3044,9 @@ private fun PilotChatSessions(
             }
             creating = false
             result.onSuccess { session ->
-                title = ""
                 actionText = if (zh) "聊天会话已创建" else "Chat session created"
                 refresh++
+                onSessionClick(session)
             }.onFailure {
                 actionText = "${if (zh) "创建聊天失败" else "Create chat failed"}: ${it.message ?: it.toString()}"
             }
@@ -3120,7 +3085,6 @@ private fun PilotChatSessions(
         ) {
             val data = loaded.getOrThrow()
             val sessions = data.sessions
-            val selectedAgent = data.agents.firstOrNull { it.id == selectedAgentId } ?: data.agents.firstOrNull()
             val agentNamesById = data.agents.associate { it.id to it.name }
             item {
                 Row(
@@ -3132,17 +3096,14 @@ private fun PilotChatSessions(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     MulticaPillButton(
-                        text = if (showCreateForm) {
-                            if (zh) "收起新聊天" else "Hide New Chat"
-                        } else {
-                            if (zh) "新聊天" else "New Chat"
-                        },
+                        text = if (creating) "..." else if (zh) "新聊天" else "New Chat",
                         onClick = {
-                            showCreateForm = !showCreateForm
+                            createSession(data)
                             actionText = null
                         },
                         modifier = Modifier.weight(1f),
-                        tone = if (showCreateForm) MulticaButtonTone.Secondary else MulticaButtonTone.Primary,
+                        enabled = !creating,
+                        tone = MulticaButtonTone.Primary,
                         contentDescription = "Chat New Session Toggle",
                     )
                     MulticaPillButton(
@@ -3159,95 +3120,6 @@ private fun PilotChatSessions(
                         tone = if (showAllSessions) MulticaButtonTone.Secondary else MulticaButtonTone.Ghost,
                         contentDescription = "Chat Sessions History Toggle",
                     )
-                }
-            }
-            if (showCreateForm) {
-                item {
-                    SettingsSectionLabel(if (zh) "新聊天" else "New Chat")
-                    ChatNewSessionWebPanel(
-                        modifier = Modifier.semantics { contentDescription = "Chat New Session Web Panel" },
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics(mergeDescendants = false) { contentDescription = "Chat New Session Web Form" },
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            MulticaTextField(
-                                value = title,
-                                onValueChange = { title = it },
-                                label = if (zh) "标题" else "Title",
-                                contentDescription = "Chat New Session Title",
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 2.dp),
-                            )
-                            ChatAgentPickerRow(
-                                selectedAgent = selectedAgent,
-                                expanded = agentPickerOpen,
-                                zh = zh,
-                                onClick = {
-                                    if (data.agents.isNotEmpty()) {
-                                        agentPickerOpen = !agentPickerOpen
-                                        actionText = null
-                                    }
-                                },
-                            )
-                        }
-                        if (agentPickerOpen) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(0.dp),
-                            ) {
-                                MulticaTextField(
-                                    value = agentQuery,
-                                    onValueChange = { agentQuery = it },
-                                    label = if (zh) "搜索 Agent" else "Search Agents",
-                                    contentDescription = "Chat Agent Search",
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                )
-                            val filteredAgents = data.agents.filter { agent ->
-                                val haystack = "${agent.name}\n${agent.description}\n${agent.id}".lowercase()
-                                haystack.contains(agentQuery.trim().lowercase())
-                            }
-                            if (filteredAgents.isEmpty()) {
-                                Text(
-                                    text = if (zh) "没有匹配的 Agent" else "No matching agents",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MulticaColors.Muted,
-                                    modifier = Modifier.padding(vertical = 6.dp),
-                                )
-                            }
-                            filteredAgents.take(20).forEachIndexed { index, agent ->
-                                ChatAgentWebDenseRow(
-                                    agent = agent,
-                                    selected = agent.id == selectedAgent?.id,
-                                    showDivider = index < filteredAgents.lastIndex && index < 19,
-                                    onClick = {
-                                        selectedAgentId = agent.id
-                                        agentPickerOpen = false
-                                        agentQuery = ""
-                                        actionText = null
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp, bottom = 12.dp),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        MulticaPillButton(
-                            text = if (creating) "..." else if (zh) "创建聊天" else "Create Chat",
-                            onClick = { createSession(data) },
-                            tone = MulticaButtonTone.Primary,
-                        )
-                    }
-                    }
                 }
             }
             if (!actionText.isNullOrBlank()) {
@@ -3544,6 +3416,7 @@ private fun PilotChatMessages(
     session: Models.ChatSession,
     zh: Boolean,
     onBack: () -> Unit,
+    onSessionChanged: (Models.ChatSession) -> Unit,
     onArchived: () -> Unit,
 ) {
     var state by remember(session.id) { mutableStateOf<Result<PilotChatMessagesData>?>(null) }
@@ -3555,7 +3428,13 @@ private fun PilotChatMessages(
     var archiving by remember(session.id) { mutableStateOf(false) }
     var cancelling by remember(session.id) { mutableStateOf(false) }
     var headerMenuOpen by remember(session.id) { mutableStateOf(false) }
+    var agentPickerOpen by remember(session.id) { mutableStateOf(false) }
+    var agentQuery by remember(session.id) { mutableStateOf("") }
+    var switchingAgentId by remember(session.id) { mutableStateOf<String?>(null) }
+    var composerFocused by remember(session.id) { mutableStateOf(false) }
     var actionError by remember(session.id) { mutableStateOf<String?>(null) }
+    val configuration = LocalConfiguration.current
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val hazeState = rememberHazeState()
@@ -3568,8 +3447,11 @@ private fun PilotChatMessages(
                 val messages = api.chatMessages(workspaceId, session.id)
                 val pending = runCatching { api.pendingChatTask(workspaceId, session.id) }
                     .getOrElse { Models.ChatPendingTask(org.json.JSONObject()) }
+                val agents = api.agents(workspaceId)
+                    .filter { it.archivedAt.isBlank() }
+                    .sortedBy { it.name.lowercase() }
                 runCatching { api.markChatSessionRead(workspaceId, session.id) }
-                PilotChatMessagesData(messages, pending)
+                PilotChatMessagesData(messages, pending, agents)
             }
         }
     }
@@ -3646,6 +3528,35 @@ private fun PilotChatMessages(
         }
     }
 
+    fun switchAgent(agent: Models.Agent) {
+        if (agent.id == session.agentId || switchingAgentId != null) {
+            agentPickerOpen = false
+            return
+        }
+        switchingAgentId = agent.id
+        actionError = null
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    api.createChatSession(
+                        workspaceId,
+                        agent.id,
+                        ChatExperiencePolicy.newChatInitialTitle(),
+                    )
+                }
+            }
+            switchingAgentId = null
+            result.onSuccess { next ->
+                agentPickerOpen = false
+                agentQuery = ""
+                onSessionChanged(next)
+            }.onFailure {
+                actionError = "${if (zh) "切换 Agent 失败" else "Switch agent failed"}: ${it.message ?: it.toString()}"
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -3711,6 +3622,57 @@ private fun PilotChatMessages(
                 modifier = Modifier.padding(horizontal = 18.dp),
             )
         }
+        loaded?.getOrNull()?.let { chatData ->
+            val activeAgent = chatData.agents.firstOrNull { it.id == session.agentId } ?: chatData.agents.firstOrNull()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 8.dp)
+                    .semantics(mergeDescendants = false) { contentDescription = "Chat Detail Agent Selector" },
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ChatAgentPickerRow(
+                    selectedAgent = activeAgent,
+                    expanded = agentPickerOpen,
+                    zh = zh,
+                    onClick = {
+                        if (chatData.agents.isNotEmpty() && switchingAgentId == null) {
+                            agentPickerOpen = !agentPickerOpen
+                            actionError = null
+                        }
+                    },
+                )
+                if (agentPickerOpen) {
+                    MulticaTextField(
+                        value = agentQuery,
+                        onValueChange = { agentQuery = it },
+                        label = if (zh) "搜索 Agent" else "Search Agents",
+                        contentDescription = "Chat Detail Agent Search",
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    val filteredAgents = chatData.agents.filter { agent ->
+                        val haystack = "${agent.name}\n${agent.description}\n${agent.id}".lowercase()
+                        haystack.contains(agentQuery.trim().lowercase())
+                    }
+                    if (filteredAgents.isEmpty()) {
+                        Text(
+                            text = if (zh) "没有匹配的 Agent" else "No matching agents",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MulticaColors.Muted,
+                        )
+                    }
+                    filteredAgents.take(20).forEachIndexed { index, agent ->
+                        ChatAgentWebDenseRow(
+                            agent = agent,
+                            selected = agent.id == activeAgent?.id,
+                            showDivider = index < filteredAgents.lastIndex && index < 19,
+                            onClick = { switchAgent(agent) },
+                        )
+                    }
+                }
+            }
+        }
         if (!actionError.isNullOrBlank()) {
             PilotInlineResultState(
                 message = actionError.orEmpty(),
@@ -3758,15 +3720,7 @@ private fun PilotChatMessages(
                     }
                 }
                 items(messages) { message ->
-                    ChatMessageBubble(message = message, zh = zh)
-                    if (validChatTaskId(message.taskId)) {
-                        ChatTaskTimeline(
-                            api = api,
-                            workspaceId = workspaceId,
-                            taskId = message.taskId,
-                            zh = zh,
-                        )
-                    }
+                    ChatMessageBubble(message = message, zh = zh, api = api, workspaceId = workspaceId)
                 }
                 if (sending || locallyPending || validChatTaskId(activePending.taskId)) {
                     item(key = "chat-latest-progress") {
@@ -3800,7 +3754,15 @@ private fun PilotChatMessages(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                        .heightIn(min = if (composerFocused) focusedComposerHeight else 0.dp)
+                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                        .semantics {
+                            contentDescription = if (composerFocused) {
+                                "Chat Focused Composer Expanded"
+                            } else {
+                                "Chat Compact Composer"
+                            }
+                        },
                     shape = RoundedCornerShape(14.dp),
                     color = MulticaColors.Surface.copy(alpha = 0.94f),
                     tonalElevation = 0.dp,
@@ -3820,8 +3782,9 @@ private fun PilotChatMessages(
                             modifier = Modifier.weight(1f),
                             label = if (zh) "发送 Markdown 消息..." else "Send a Markdown message...",
                             contentDescription = "Chat Message Input",
-                            minLines = 1,
-                            maxLines = 4,
+                            minLines = if (composerFocused) 12 else 1,
+                            maxLines = if (composerFocused) 18 else 4,
+                            onFocusedChange = { composerFocused = it },
                         )
                         MulticaIconPillButton(
                             icon = Icons.AutoMirrored.Outlined.Send,
@@ -3920,6 +3883,8 @@ private fun ChatWindowWebEmptyState(
 private fun ChatMessageBubble(
     message: Models.ChatMessage,
     zh: Boolean,
+    api: ApiClient? = null,
+    workspaceId: String? = null,
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -3991,6 +3956,21 @@ private fun ChatMessageBubble(
                         onDismissRequest = { moreOpen = false },
                     )
                 }
+                if (!isUser && api != null && !workspaceId.isNullOrBlank() && validChatTaskId(message.taskId)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Chat Assistant Bubble Timeline ${message.taskId}" },
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        ChatTaskWebLiveBanner(
+                            title = if (zh) "Agent 执行过程" else "Agent timeline",
+                            subtitle = Models.shortId(message.taskId),
+                            active = false,
+                        )
+                        ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = message.taskId, zh = zh)
+                    }
+                }
                 if (meta.isNotBlank()) {
                     Text(
                         text = meta,
@@ -4029,21 +4009,36 @@ private fun ChatPendingTimelineCard(
     status: String,
     zh: Boolean,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Chat Pending Timeline" },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .semantics { contentDescription = "Chat Message Bubble assistant streaming Chat Pending Timeline" },
+        horizontalArrangement = Arrangement.Start,
     ) {
-        ChatTaskWebLiveBanner(
-            title = if (zh) "Agent 正在处理" else "Agent is running",
-            subtitle = listOf(status.ifBlank { if (zh) "等待任务创建" else "Waiting for task" }, Models.shortId(taskId))
-                .filter { it.isNotBlank() }
-                .joinToString(" · "),
-            active = true,
-        )
-        if (taskId.isNotBlank()) {
-            ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = taskId, zh = zh)
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.84f),
+            shape = RoundedCornerShape(12.dp),
+            color = MulticaColors.Surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .border(1.dp, MulticaColors.Border, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ChatTaskWebLiveBanner(
+                    title = if (zh) "Agent 正在处理" else "Agent is running",
+                    subtitle = listOf(status.ifBlank { if (zh) "等待任务创建" else "Waiting for task" }, Models.shortId(taskId))
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                    active = true,
+                )
+                if (taskId.isNotBlank()) {
+                    ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = taskId, zh = zh)
+                }
+            }
         }
     }
 }
@@ -10776,6 +10771,9 @@ private fun IssueCommentReplyBox(
 ) {
     var mentionPickerOpen by remember(parentId) { mutableStateOf(false) }
     var mentionQuery by remember(parentId) { mutableStateOf("") }
+    var replyFocused by remember(parentId) { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
     val focusRequester = remember(parentId) { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -10819,8 +10817,15 @@ val replyActionModifier = Modifier.size(42.dp)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = if (replyFocused) focusedComposerHeight else 0.dp)
             .padding(start = if (bottomMode) 0.dp else 38.dp, bottom = if (bottomMode) 0.dp else 8.dp)
-            .semantics(mergeDescendants = false) { contentDescription = "Issue Comment Web Reply Editor $parentId" },
+            .semantics(mergeDescendants = false) {
+                contentDescription = if (replyFocused) {
+                    "Issue Comment Web Reply Editor Expanded $parentId"
+                } else {
+                    "Issue Comment Web Reply Editor $parentId"
+                }
+            },
         shape = RoundedCornerShape(14.dp),
         color = MulticaColors.Surface.copy(alpha = 0.82f),
         border = androidx.compose.foundation.BorderStroke(1.dp, MulticaColors.Border.copy(alpha = 0.76f)),
@@ -10844,8 +10849,9 @@ val replyActionModifier = Modifier.size(42.dp)
                     .focusRequester(focusRequester)
                     .semantics(mergeDescendants = true) { contentDescription = "Issue Comment Reply Input $parentId" },
                 label = if (zh) "写回复..." else "Write a reply...",
-                minLines = 2,
-                maxLines = 5,
+                minLines = if (replyFocused) 12 else 3,
+                maxLines = if (replyFocused) 18 else 7,
+                onFocusedChange = { replyFocused = it },
             )
             if (pendingAttachments.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -11148,6 +11154,9 @@ private fun IssueCommentInputBar(
 ) {
     var mentionPickerOpen by remember { mutableStateOf(false) }
     var mentionQuery by remember { mutableStateOf("") }
+    var commentFocused by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
     val mentionItems = remember(agents, members, squads, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
         val agentItems = agents
@@ -11208,71 +11217,87 @@ private fun IssueCommentInputBar(
             // Issue Comment Cupertino Composer mirrors Web comment-input.tsx's rounded editor surface.
             val composerActionModifier = Modifier.size(38.dp)
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = if (commentFocused) focusedComposerHeight else 0.dp)
+                    .semantics {
+                        contentDescription = if (commentFocused) {
+                            "Issue Comment Focused Composer Expanded"
+                        } else {
+                            "Issue Comment Compact Composer"
+                        }
+                    },
                 shape = RoundedCornerShape(14.dp),
                 color = MulticaColors.Surface,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, MulticaColors.Border.copy(alpha = 0.86f)),
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalAlignment = Alignment.Bottom,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    MulticaIconPillButton(
-                        icon = Icons.Outlined.Image,
-                        contentDescription = "Issue Comment Attach Image",
-                        onClick = onAttachImage,
-                        tone = MulticaButtonTone.Secondary,
-                        enabled = !uploadingAttachment,
-                        modifier = composerActionModifier,
-                    )
-                    MulticaIconPillButton(
-                        icon = Icons.Outlined.AttachFile,
-                        contentDescription = "Issue Comment Attach",
-                        onClick = onAttach,
-                        tone = MulticaButtonTone.Secondary,
-                        enabled = !uploadingAttachment,
-                        modifier = composerActionModifier,
-                    )
-                    MulticaIconPillButton(
-                        icon = Icons.Outlined.AlternateEmail,
-                        contentDescription = "Issue Comment Agent Mention",
-                        onClick = { mentionPickerOpen = !mentionPickerOpen },
-                        tone = if (mentionPickerOpen) MulticaButtonTone.Primary else MulticaButtonTone.Secondary,
-                        modifier = composerActionModifier,
-                    )
                     MulticaTextField(
                         value = draft,
                         onValueChange = onDraftChange,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         label = "",
                         placeholder = if (zh) "评论" else "Comment",
                         showLabel = false,
                         contentDescription = "Issue Comment Input",
-                        minLines = 1,
-                        maxLines = 4,
+                        minLines = if (commentFocused) 12 else 1,
+                        maxLines = if (commentFocused) 18 else 4,
+                        onFocusedChange = { commentFocused = it },
                     )
-                    MulticaIconPillButton(
-                        icon = Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = if (zh) "发送评论" else "Send Comment",
-                        enabled = !sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty()),
-                        onClick = onSend,
-                        tone = MulticaButtonTone.Primary,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                if (!sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty())) {
-                                    MulticaColors.Accent
-                                } else {
-                                    MulticaColors.Border.copy(alpha = 0.42f)
-                                }
-                            ),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MulticaIconPillButton(
+                            icon = Icons.Outlined.Image,
+                            contentDescription = "Issue Comment Attach Image",
+                            onClick = onAttachImage,
+                            tone = MulticaButtonTone.Secondary,
+                            enabled = !uploadingAttachment,
+                            modifier = composerActionModifier,
+                        )
+                        MulticaIconPillButton(
+                            icon = Icons.Outlined.AttachFile,
+                            contentDescription = "Issue Comment Attach",
+                            onClick = onAttach,
+                            tone = MulticaButtonTone.Secondary,
+                            enabled = !uploadingAttachment,
+                            modifier = composerActionModifier,
+                        )
+                        MulticaIconPillButton(
+                            icon = Icons.Outlined.AlternateEmail,
+                            contentDescription = "Issue Comment Agent Mention",
+                            onClick = { mentionPickerOpen = !mentionPickerOpen },
+                            tone = if (mentionPickerOpen) MulticaButtonTone.Primary else MulticaButtonTone.Secondary,
+                            modifier = composerActionModifier,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        MulticaIconPillButton(
+                            icon = Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = if (zh) "发送评论" else "Send Comment",
+                            enabled = !sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty()),
+                            onClick = onSend,
+                            tone = MulticaButtonTone.Primary,
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(
+                                    if (!sending && (draft.trim().isNotEmpty() || pendingAttachments.isNotEmpty())) {
+                                        MulticaColors.Accent
+                                    } else {
+                                        MulticaColors.Border.copy(alpha = 0.42f)
+                                    }
+                                ),
+                        )
+                    }
                 }
             }
             if (mentionPickerOpen) {
