@@ -13,42 +13,81 @@ import java.util.regex.Pattern;
 
 final class AgentMentionMarkdown {
     static String markdown(String name, String agentId) {
-        String cleanName = name == null ? "" : name.trim()
-                .replace("[", "\\[")
-                .replace("]", "\\]");
-        if (cleanName.isEmpty()) cleanName = Models.shortId(agentId);
-        return "[@" + cleanName + "](mention://agent/" + agentId + ")";
+        return mentionMarkdown("agent", name, agentId);
     }
 
-    static String displayText(String name, String agentId) {
+    static String memberMarkdown(String name, String memberId) {
+        return mentionMarkdown("member", name, memberId);
+    }
+
+    static String squadMarkdown(String name, String squadId) {
+        return mentionMarkdown("squad", name, squadId);
+    }
+
+    static String displayText(String name, String id) {
         String cleanName = cleanName(name);
-        if (cleanName.isEmpty()) cleanName = Models.shortId(agentId);
+        if (cleanName.isEmpty()) cleanName = Models.shortId(id);
         return "@" + cleanName;
     }
 
     static String markdownFromDraft(String draft, List<Models.Agent> agents) {
+        return markdownFromDraft(draft, agents, Collections.emptyList(), Collections.emptyList());
+    }
+
+    static String markdownFromDraft(String draft, List<Models.Agent> agents,
+                                    List<Models.Member> members, List<Models.Squad> squads) {
         String content = draft == null ? "" : draft.trim();
-        if (content.isEmpty() || content.contains("mention://agent/") || agents == null || agents.isEmpty()) {
-            return content;
+        if (content.isEmpty() || content.contains("mention://")) return content;
+        ArrayList<MentionReplacement> replacements = new ArrayList<>();
+        if (agents != null) {
+            for (Models.Agent agent : agents) {
+                replacements.add(new MentionReplacement(displayText(agent.name, agent.id), markdown(agent.name, agent.id)));
+            }
         }
-        ArrayList<Models.Agent> sortedAgents = new ArrayList<>(agents);
-        sortedAgents.sort((left, right) -> Integer.compare(
-                displayText(right.name, right.id).length(),
-                displayText(left.name, left.id).length()
-        ));
+        if (members != null) {
+            for (Models.Member member : members) {
+                replacements.add(new MentionReplacement(displayText(member.displayName, member.id), memberMarkdown(member.displayName, member.id)));
+                if (member.userId != null && !member.userId.isEmpty() && !member.userId.equals(member.id)) {
+                    replacements.add(new MentionReplacement(displayText(member.displayName, member.userId), memberMarkdown(member.displayName, member.userId)));
+                }
+            }
+        }
+        if (squads != null) {
+            for (Models.Squad squad : squads) {
+                replacements.add(new MentionReplacement(displayText(squad.name, squad.id), squadMarkdown(squad.name, squad.id)));
+            }
+        }
+        replacements.sort((left, right) -> Integer.compare(right.display.length(), left.display.length()));
         String normalized = content;
-        for (Models.Agent agent : sortedAgents) {
-            String display = displayText(agent.name, agent.id);
-            if (display.length() <= 1) continue;
-            normalized = normalized.replace(display, markdown(agent.name, agent.id));
+        for (MentionReplacement replacement : replacements) {
+            if (replacement.display.length() <= 1) continue;
+            normalized = normalized.replace(replacement.display, replacement.markdown);
         }
         return normalized;
+    }
+
+    private static String mentionMarkdown(String type, String name, String id) {
+        String cleanName = cleanName(name)
+                .replace("[", "\\[")
+                .replace("]", "\\]");
+        if (cleanName.isEmpty()) cleanName = Models.shortId(id);
+        return "[@" + cleanName + "](mention://" + type + "/" + id + ")";
     }
 
     private static String cleanName(String name) {
         if (name == null) return "";
         String trimmed = name.trim();
         return "null".equalsIgnoreCase(trimmed) ? "" : trimmed;
+    }
+
+    private static final class MentionReplacement {
+        final String display;
+        final String markdown;
+
+        MentionReplacement(String display, String markdown) {
+            this.display = display;
+            this.markdown = markdown;
+        }
     }
 
     private AgentMentionMarkdown() {
@@ -60,11 +99,17 @@ final class IssueCommentRichText {
 
     static String mentionDisplayLabel(String mentionType, String mentionId, String fallbackLabel,
                                       List<Models.Member> members, List<Models.Agent> agents,
-                                      Models.User currentUser) {
-        String resolved = resolveMentionName(mentionType, mentionId, members, agents, currentUser);
+                                      List<Models.Squad> squads, Models.User currentUser) {
+        String resolved = resolveMentionName(mentionType, mentionId, members, agents, squads, currentUser);
         String label = resolved.isEmpty() ? cleanMentionFallback(fallbackLabel, mentionId) : resolved;
         if (label.startsWith("@")) return label;
         return "@" + label;
+    }
+
+    static String mentionDisplayLabel(String mentionType, String mentionId, String fallbackLabel,
+                                      List<Models.Member> members, List<Models.Agent> agents,
+                                      Models.User currentUser) {
+        return mentionDisplayLabel(mentionType, mentionId, fallbackLabel, members, agents, Collections.emptyList(), currentUser);
     }
 
     static int issueIdentifierEndAt(String value, int start) {
@@ -105,7 +150,7 @@ final class IssueCommentRichText {
 
     private static String resolveMentionName(String mentionType, String mentionId,
                                              List<Models.Member> members, List<Models.Agent> agents,
-                                             Models.User currentUser) {
+                                             List<Models.Squad> squads, Models.User currentUser) {
         String type = mentionType == null ? "" : mentionType.toLowerCase(Locale.US);
         String id = mentionId == null ? "" : mentionId;
         if ("agent".equals(type)) {
@@ -119,12 +164,20 @@ final class IssueCommentRichText {
                 if (id.equals(member.id) || id.equals(member.userId)) return clean(member.displayName);
             }
         }
+        if ("squad".equals(type)) {
+            for (Models.Squad squad : squads) {
+                if (id.equals(squad.id)) return clean(squad.name);
+            }
+        }
         for (Models.Agent agent : agents) {
             if (id.equals(agent.id)) return clean(agent.name);
         }
         if (currentUser != null && id.equals(currentUser.id)) return clean(currentUser.name);
         for (Models.Member member : members) {
             if (id.equals(member.id) || id.equals(member.userId)) return clean(member.displayName);
+        }
+        for (Models.Squad squad : squads) {
+            if (id.equals(squad.id)) return clean(squad.name);
         }
         return "";
     }

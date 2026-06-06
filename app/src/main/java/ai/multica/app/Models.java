@@ -166,12 +166,16 @@ final class Models {
         return subscriber.userType == null ? "" : subscriber.userType;
     }
 
-    static String issueAssigneeDisplayName(Issue issue, List<Member> members, List<Agent> agents, User currentUser) {
+    static String issueAssigneeDisplayName(Issue issue, List<Member> members, List<Agent> agents, List<Squad> squads, User currentUser) {
         if (issue == null || issue.assigneeId == null || issue.assigneeId.isEmpty()) return "";
         String assigneeId = issue.assigneeId;
         if ("agent".equals(issue.assigneeType)) {
             for (Agent agent : agents) {
                 if (assigneeId.equals(agent.id)) return agent.name;
+            }
+        } else if ("squad".equals(issue.assigneeType)) {
+            for (Squad squad : squads) {
+                if (assigneeId.equals(squad.id)) return squad.name;
             }
         } else {
             if (currentUser != null && assigneeId.equals(currentUser.id)) return currentUser.name;
@@ -185,11 +189,16 @@ final class Models {
         for (Member member : members) {
             if (assigneeId.equals(member.id) || assigneeId.equals(member.userId)) return member.displayName;
         }
+        for (Squad squad : squads) {
+            if (assigneeId.equals(squad.id)) return squad.name;
+        }
         String prefix;
         if ("agent".equals(issue.assigneeType)) {
             prefix = "Agent ";
         } else if ("member".equals(issue.assigneeType)) {
             prefix = "Member ";
+        } else if ("squad".equals(issue.assigneeType)) {
+            prefix = "Squad ";
         } else {
             prefix = "";
         }
@@ -197,7 +206,7 @@ final class Models {
     }
 
     static List<Assignee> issueAssignees(boolean includeEmpty, String emptyLabel, User currentUser,
-                                         List<Member> members, List<Agent> agents) {
+                                         List<Member> members, List<Agent> agents, List<Squad> squads) {
         List<Assignee> list = new ArrayList<>();
         List<String> seenMemberIds = new ArrayList<>();
         if (includeEmpty) list.add(new Assignee(null, null, emptyLabel));
@@ -213,6 +222,10 @@ final class Models {
         for (Agent agent : agents) {
             if (agent.id == null || agent.id.isEmpty()) continue;
             list.add(new Assignee(agent.id, "agent", agent.name));
+        }
+        for (Squad squad : squads) {
+            if (squad.id == null || squad.id.isEmpty()) continue;
+            list.add(new Assignee(squad.id, "squad", squad.name));
         }
         return list;
     }
@@ -755,6 +768,27 @@ final class Models {
             customEnvRedacted = json.optBoolean("custom_env_redacted", false);
         }
     }
+
+    static final class Squad {
+        final String id;
+        final String name;
+        final String description;
+        final String avatarUrl;
+        final String archivedAt;
+        final List<String> agentIds;
+        final List<String> memberIds;
+
+        Squad(JSONObject json) {
+            id = json.optString("id");
+            name = json.optString("name", shortId(id));
+            description = json.optString("description", "");
+            avatarUrl = cleanString(json, "avatar_url", cleanString(json, "avatarUrl", ""));
+            archivedAt = cleanString(json, "archived_at", "");
+            agentIds = stringList(json.optJSONArray("agent_ids"));
+            memberIds = stringList(json.optJSONArray("member_ids"));
+        }
+    }
+
 
     static final class Runtime {
         final String id;
