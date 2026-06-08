@@ -14,6 +14,7 @@ import runtimesImg from "./assets/screenshots/11-runtimes-list.jpg";
 import skillsImg from "./assets/screenshots/12-skills-list.jpg";
 import skillDetailImg from "./assets/screenshots/13-skill-detail.jpg";
 import settingsImg from "./assets/screenshots/14-settings.jpg";
+import promoVideo from "./assets/video/multica-android-promo-draft.mp4";
 
 const release = {
   packageName: "ai.multicasual.app",
@@ -32,6 +33,7 @@ const copy: Record<Locale, {
   relationship: { kicker: string; title: string; body1: string; body2: string };
   journey: { kicker: string; title: string; subtitle: string; cta: string; steps: Array<{ title: string; subtitle: string }> };
   workspace: { kicker: string; title: string; subtitle: string; items: Array<{ title: string; subtitle: string }> };
+  video: { kicker: string; title: string; body: string };
   download: { kicker: string; title: string; package: string; api: string; sha: string; latest: string; source: string };
   trust: { kicker: string; items: string[] };
   footer: { tagline: string; multica: string; github: string; download: string };
@@ -83,6 +85,7 @@ const copy: Record<Locale, {
         { title: "Settings", subtitle: "Account, workspace, and preference controls" },
       ],
     },
+    video: { kicker: "Product demo", title: "See it in 30 seconds.", body: "A fast walkthrough of inbox, issues, context, comments, mentions, and workspace views." },
     download: { kicker: "GitHub APK", title: "Install from GitHub Releases.", package: "Package", api: "Service API", sha: "APK SHA256", latest: "Latest release", source: "Source code" },
     trust: {
       kicker: "Trust and privacy",
@@ -142,6 +145,7 @@ const copy: Record<Locale, {
         { title: "Settings", subtitle: "账号、工作区和偏好控制" },
       ],
     },
+    video: { kicker: "产品演示", title: "30 秒看完核心流程。", body: "快速演示 inbox 通知、issues 看板、上下文探索、评论回复、@ 提及和 workspace 视图切换。" },
     download: { kicker: "GitHub APK", title: "从 GitHub Releases 安装。", package: "Package", api: "Service API", sha: "APK SHA256", latest: "最新版本", source: "源代码" },
     trust: {
       kicker: "信任与隐私",
@@ -597,6 +601,16 @@ export default function App() {
             </motion.div>
           ))}
         </motion.div>
+      </motion.section>
+
+      {/* Video Demo */}
+      <motion.section className="video-demo section-pad" {...reveal(reduced)}>
+        <div className="section-kicker">{t.video.kicker}</div>
+        <div className="video-copy">
+          <h2>{t.video.title}</h2>
+          <p>{t.video.body}</p>
+        </div>
+        <video className="promo-video" src={promoVideo} controls playsInline preload="metadata" />
       </motion.section>
 
       {/* Download */}
