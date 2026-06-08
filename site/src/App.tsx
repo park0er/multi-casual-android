@@ -35,7 +35,7 @@ const copy: Record<Locale, {
   journey: { kicker: string; title: string; subtitle: string; cta: string; steps: Array<{ title: string; subtitle: string }> };
   workspace: { kicker: string; title: string; subtitle: string; items: Array<{ title: string; subtitle: string }> };
   video: { kicker: string; title: string; body: string };
-  download: { kicker: string; title: string; package: string; api: string; sha: string; latest: string; source: string };
+  download: { kicker: string; title: string; package: string; api: string; sha: string; latest: string; source: string; star: string };
   trust: { kicker: string; items: string[] };
   footer: { tagline: string; multica: string; github: string; download: string };
 }> = {
@@ -87,7 +87,7 @@ const copy: Record<Locale, {
       ],
     },
     video: { kicker: "Product demo", title: "See it in 30 seconds.", body: "A fast walkthrough of inbox, issues, context, comments, mentions, and workspace views." },
-    download: { kicker: "GitHub APK", title: "Install from GitHub Releases.", package: "Package", api: "Service API", sha: "APK SHA256", latest: "Latest release", source: "Source code" },
+    download: { kicker: "GitHub APK", title: "Install from GitHub Releases.", package: "Package", api: "Service API", sha: "APK SHA256", latest: "Latest release", source: "Source code", star: "Like the app? Give us a star on GitHub ⭐ — it means a lot to the maintainers." },
     trust: {
       kicker: "Trust and privacy",
       items: [
@@ -147,7 +147,7 @@ const copy: Record<Locale, {
       ],
     },
     video: { kicker: "产品演示", title: "30 秒看完核心流程。", body: "快速演示 inbox 通知、issues 看板、上下文探索、评论回复、@ 提及和 workspace 视图切换。" },
-    download: { kicker: "GitHub APK", title: "从 GitHub Releases 安装。", package: "Package", api: "Service API", sha: "APK SHA256", latest: "最新版本", source: "源代码" },
+    download: { kicker: "GitHub APK", title: "从 GitHub Releases 安装。", package: "Package", api: "Service API", sha: "APK SHA256", latest: "最新版本", source: "源代码", star: "喜欢我们的 app？请在 GitHub 上给项目点个 Star ⭐，这是对我们作者最大的支持。" },
     trust: {
       kicker: "信任与隐私",
       items: [
@@ -641,6 +641,7 @@ export default function App() {
             <a className="button primary" href={release.releasesUrl}>{t.download.latest}</a>
             <a className="button secondary" href={release.githubUrl}>{t.download.source}</a>
           </div>
+          <p className="star-hint">{t.download.star}</p>
         </motion.div>
       </section>
 
