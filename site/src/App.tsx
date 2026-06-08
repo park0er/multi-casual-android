@@ -641,7 +641,12 @@ export default function App() {
             <a className="button primary" href={release.releasesUrl}>{t.download.latest}</a>
             <a className="button secondary" href={release.githubUrl}>{t.download.source}</a>
           </div>
-          <p className="star-hint">{t.download.star}</p>
+          <p className="star-hint">
+            {lang === "en"
+              ? <>Like the app? Give us a star on <a href={release.githubUrl} target="_blank" rel="noopener">GitHub</a> ⭐ — it means a lot to the maintainers.</>
+              : <>喜欢我们的 app？请在 <a href={release.githubUrl} target="_blank" rel="noopener">GitHub</a> 上给项目点个 Star ⭐，这是对我们作者最大的支持。</>
+            }
+          </p>
         </motion.div>
       </section>
 
