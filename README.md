@@ -9,6 +9,15 @@ This repository publishes an Android app that works with the Multica backend ser
 The app exists for users who already use Multica and want the core workspace workflow on Android: issue browsing, issue details, comments, projects, agents, skills, labels, and settings.
 
 - Multica website: https://multica.ai
+
+<table>
+  <tr>
+    <td><b>cn</b></td><td><a href="https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/">multi-casual-china-8temdtzs.zh-cn.edgeone.cool</a></td>
+  </tr>
+  <tr>
+    <td><b>global</b></td><td><a href="https://multi-casual-android.pages.dev/">multi-casual-android.pages.dev</a></td>
+  </tr>
+</table>
 - Multica web app: https://app.multica.ai
 - Service API used by this app: `https://api.multica.ai`
 - Android package: `ai.multicasual.app`
@@ -68,8 +77,8 @@ Optional analytics keys can be filled in locally. Do not commit real keys.
 Build a local debug APK for development:
 
 ```bash
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
-ANDROID_HOME="$HOME/Library/Android/sdk" \
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \\
+ANDROID_HOME="$HOME/Library/Android/sdk" \\
 ./gradlew assemblePublicDebug --console=plain
 ```
 
@@ -184,8 +193,8 @@ cp local.properties.example local.properties
 构建本地开发用 debug APK：
 
 ```bash
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
-ANDROID_HOME="$HOME/Library/Android/sdk" \
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \\
+ANDROID_HOME="$HOME/Library/Android/sdk" \\
 ./gradlew assemblePublicDebug --console=plain
 ```
 
