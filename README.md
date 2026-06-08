@@ -131,7 +131,6 @@ If you distribute a modified APK or other binary based on this project, keep the
 这个 App 面向已经使用 Multica 的用户，把核心 workspace 工作流带到 Android 上：Issue 浏览、Issue 详情、评论、项目、Agent、Skill、Label 和设置等能力。
 
 - Multica 网站：https://multica.ai
-- Multica Web 应用：https://app.multica.ai
 - 本 App 使用的服务 API：`https://api.multica.ai`
 - Android 包名：`ai.multicasual.app`
 
