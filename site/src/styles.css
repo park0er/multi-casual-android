@@ -892,3 +892,8 @@ pre {
   text-align: center;
   font-weight: 600;
 }
+
+.star-hint a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
