@@ -399,6 +399,16 @@ private data class PilotChatSessionsData(
     val agents: List<Models.Agent>,
 )
 
+private fun localDraftChatSession(agent: Models.Agent): Models.ChatSession =
+    Models.ChatSession(
+        JSONObject()
+            .put("id", "")
+            .put("title", "")
+            .put("agent_id", agent.id)
+            .put("status", "draft")
+            .put("updated_at", ""),
+    )
+
 private data class PilotProjectDetailData(
     val project: Models.Project,
     val issues: List<Models.Issue>,
@@ -3007,7 +3017,6 @@ private fun PilotChatSessions(
     var state by remember(workspaceId) { mutableStateOf<Result<PilotChatSessionsData>?>(null) }
     var refresh by remember(workspaceId) { mutableIntStateOf(0) }
     var showAllSessions by remember(workspaceId) { mutableStateOf(false) }
-    var creating by remember(workspaceId) { mutableStateOf(false) }
     var deletingSessionId by remember(workspaceId) { mutableStateOf<String?>(null) }
     var actionText by remember(workspaceId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -3028,29 +3037,14 @@ private fun PilotChatSessions(
         state = loaded
     }
 
-    fun createSession(data: PilotChatSessionsData) {
-        if (creating) return
+    fun openDraftSession(data: PilotChatSessionsData) {
         val agent = data.agents.firstOrNull()
         if (agent == null) {
             actionText = if (zh) "请先创建 Agent" else "Create an agent first"
             return
         }
-        val sessionTitle = ChatExperiencePolicy.newChatInitialTitle()
-        creating = true
         actionText = null
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { api.createChatSession(workspaceId, agent.id, sessionTitle) }
-            }
-            creating = false
-            result.onSuccess { session ->
-                actionText = if (zh) "聊天会话已创建" else "Chat session created"
-                refresh++
-                onSessionClick(session)
-            }.onFailure {
-                actionText = "${if (zh) "创建聊天失败" else "Create chat failed"}: ${it.message ?: it.toString()}"
-            }
-        }
+        onSessionClick(localDraftChatSession(agent))
     }
 
     fun deleteSession(session: Models.ChatSession) {
@@ -3096,13 +3090,12 @@ private fun PilotChatSessions(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     MulticaPillButton(
-                        text = if (creating) "..." else if (zh) "新聊天" else "New Chat",
+                        text = if (zh) "新聊天" else "New Chat",
                         onClick = {
-                            createSession(data)
+                            openDraftSession(data)
                             actionText = null
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !creating,
                         tone = MulticaButtonTone.Primary,
                         contentDescription = "Chat New Session Toggle",
                     )
@@ -3419,6 +3412,7 @@ private fun PilotChatMessages(
     onSessionChanged: (Models.ChatSession) -> Unit,
     onArchived: () -> Unit,
 ) {
+    val isDraftSession = session.id.isBlank()
     var state by remember(session.id) { mutableStateOf<Result<PilotChatMessagesData>?>(null) }
     var messagesRefresh by remember(session.id) { mutableIntStateOf(0) }
     var pendingRefresh by remember(session.id) { mutableIntStateOf(0) }
@@ -3432,6 +3426,7 @@ private fun PilotChatMessages(
     var agentPickerOpen by remember(session.id) { mutableStateOf(false) }
     var agentQuery by remember(session.id) { mutableStateOf("") }
     var switchingAgentId by remember(session.id) { mutableStateOf<String?>(null) }
+    var draftAgentId by remember(session.id, session.agentId) { mutableStateOf(session.agentId) }
     var composerFocused by remember(session.id) { mutableStateOf(false) }
     var actionError by remember(session.id) { mutableStateOf<String?>(null) }
     val configuration = LocalConfiguration.current
@@ -3448,12 +3443,19 @@ private fun PilotChatMessages(
         val previous = state
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                val messages = api.chatMessages(workspaceId, session.id)
-                val pending = runCatching { api.pendingChatTask(workspaceId, session.id) }
-                    .getOrElse { Models.ChatPendingTask(org.json.JSONObject()) }
                 val agents = api.agents(workspaceId)
                     .filter { it.archivedAt.isBlank() }
                     .sortedBy { it.name.lowercase() }
+                if (isDraftSession) {
+                    return@runCatching PilotChatMessagesData(
+                        emptyList(),
+                        Models.ChatPendingTask(org.json.JSONObject()),
+                        agents,
+                    )
+                }
+                val messages = api.chatMessages(workspaceId, session.id)
+                val pending = runCatching { api.pendingChatTask(workspaceId, session.id) }
+                    .getOrElse { Models.ChatPendingTask(org.json.JSONObject()) }
                 runCatching { api.markChatSessionRead(workspaceId, session.id) }
                 PilotChatMessagesData(messages, pending, agents)
             }
@@ -3466,6 +3468,7 @@ private fun PilotChatMessages(
     }
 
     LaunchedEffect(session.id, pendingRefresh) {
+        if (isDraftSession) return@LaunchedEffect
         val current = state?.getOrNull() ?: return@LaunchedEffect
         val previousPendingTaskId = current.pendingTask.taskId
         val result = withContext(Dispatchers.IO) {
@@ -3523,6 +3526,10 @@ private fun PilotChatMessages(
     }
 
     fun archiveSession() {
+        if (isDraftSession) {
+            onArchived()
+            return
+        }
         if (archiving) return
         archiving = true
         headerMenuOpen = false
@@ -3558,6 +3565,13 @@ private fun PilotChatMessages(
     }
 
     fun switchAgent(agent: Models.Agent) {
+        if (isDraftSession) {
+            draftAgentId = agent.id
+            agentPickerOpen = false
+            agentQuery = ""
+            actionError = null
+            return
+        }
         if (agent.id == session.agentId || switchingAgentId != null) {
             agentPickerOpen = false
             return
@@ -3601,7 +3615,11 @@ private fun PilotChatMessages(
                 .semantics { contentDescription = "Chat Detail Header Safe Horizontal Insets" },
         ) {
             PilotPageHeader(
-                title = session.title,
+                title = if (isDraftSession) {
+                    if (zh) "新聊天" else "New Chat"
+                } else {
+                    session.title
+                },
                 leading = { PilotSecondaryBackButton(zh = zh, onBack = onBack) },
                 trailing = {
                     MulticaIconPillButton(
@@ -3618,7 +3636,7 @@ private fun PilotChatMessages(
                             MulticaCupertinoActionSheetItem(
                                 title = if (archiving) "..." else if (zh) "归档会话" else "Archive Session",
                                 icon = Icons.Outlined.Archive,
-                                enabled = !archiving,
+                                enabled = !isDraftSession && !archiving,
                                 contentDescription = "Chat Header Cupertino Action Sheet Archive Session",
                                 onClick = { archiveSession() },
                             ),
@@ -3652,7 +3670,8 @@ private fun PilotChatMessages(
             )
         }
         loaded?.getOrNull()?.let { chatData ->
-            val activeAgent = chatData.agents.firstOrNull { it.id == session.agentId } ?: chatData.agents.firstOrNull()
+            val selectedAgentId = if (isDraftSession) draftAgentId else session.agentId
+            val activeAgent = chatData.agents.firstOrNull { it.id == selectedAgentId } ?: chatData.agents.firstOrNull()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3832,18 +3851,41 @@ private fun PilotChatMessages(
                             onClick = {
                                 val content = draft.trim()
                                 if (content.isEmpty() || sending) return@MulticaIconPillButton
+                                val targetAgentId = if (isDraftSession) {
+                                    draftAgentId.ifBlank { state?.getOrNull()?.agents?.firstOrNull()?.id.orEmpty() }
+                                } else {
+                                    session.agentId
+                                }
+                                if (isDraftSession && targetAgentId.isBlank()) {
+                                    sendError = if (zh) "请先创建 Agent" else "Create an agent first"
+                                    return@MulticaIconPillButton
+                                }
                                 sending = true
                                 locallyPending = true
                                 sendError = null
                                 scope.launch {
                                     val result = withContext(Dispatchers.IO) {
-                                        runCatching { api.sendChatMessage(workspaceId, session.id, content) }
+                                        runCatching {
+                                            if (isDraftSession) {
+                                                val title = ChatExperiencePolicy.firstChatTitle(content)
+                                                val created = api.createChatSession(workspaceId, targetAgentId, title)
+                                                api.sendChatMessage(workspaceId, created.id, content)
+                                                created
+                                            } else {
+                                                api.sendChatMessage(workspaceId, session.id, content)
+                                                session
+                                            }
+                                        }
                                     }
                                     sending = false
-                                    result.onSuccess {
+                                    result.onSuccess { created ->
                                         draft = ""
-                                        pendingRefresh++
-                                        messagesRefresh++
+                                        if (isDraftSession) {
+                                            onSessionChanged(created)
+                                        } else {
+                                            pendingRefresh++
+                                            messagesRefresh++
+                                        }
                                     }.onFailure {
                                         locallyPending = false
                                         sendError = "${if (zh) "发送失败" else "Send failed"}: ${it.message ?: it.toString()}"
