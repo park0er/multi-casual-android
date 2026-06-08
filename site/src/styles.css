@@ -24,7 +24,7 @@ body {
   background:
     radial-gradient(circle at 82% 5%, rgba(255, 228, 92, 0.4), transparent 31%),
     radial-gradient(circle at 10% 30%, rgba(22, 71, 255, 0.16), transparent 30%),
-    linear-gradient(180deg, #fbfcff 0%, var(--paper) 72%, #eef3ff 100%);
+    linear-gradient(180deg, #fbfcff 0%, #e8eeff 55%, #d4dff9 85%, #c4d4f5 100%);
 }
 
 body, button, input { font: inherit; }
@@ -544,7 +544,7 @@ h3 {
 }
 
 .workspace-phone-wrap .phone-shell-compact {
-  width: min(320px, 72vw);
+  width: min(260px, 60vw);
 }
 
 /* Mention picker overlay */
