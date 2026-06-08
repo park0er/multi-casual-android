@@ -3,4 +3,3 @@ dist/
 output/
 .playwright-cli/
 *.tsbuildinfo
-.edgeone/
