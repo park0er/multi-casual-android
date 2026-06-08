@@ -11167,6 +11167,8 @@ private fun IssueCommentInputBar(
     var mentionPickerOpen by remember { mutableStateOf(false) }
     var mentionQuery by remember { mutableStateOf("") }
     var commentFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val configuration = LocalConfiguration.current
     val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(
         ChatExperiencePolicy.Route.ISSUE_COMMENT,
@@ -11294,6 +11296,21 @@ private fun IssueCommentInputBar(
                             tone = if (mentionPickerOpen) MulticaButtonTone.Primary else MulticaButtonTone.Secondary,
                             modifier = composerActionModifier,
                         )
+                        if (commentFocused || mentionPickerOpen) {
+                            MulticaIconPillButton(
+                                icon = Icons.Outlined.Close,
+                                contentDescription = "Issue Comment Cancel Input",
+                                onClick = {
+                                    mentionPickerOpen = false
+                                    mentionQuery = ""
+                                    commentFocused = false
+                                    focusManager.clearFocus(force = true)
+                                    keyboard?.hide()
+                                },
+                                tone = MulticaButtonTone.Ghost,
+                                modifier = composerActionModifier,
+                            )
+                        }
                         Spacer(modifier = Modifier.weight(1f))
                         MulticaIconPillButton(
                             icon = Icons.AutoMirrored.Outlined.Send,
