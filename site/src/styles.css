@@ -884,3 +884,11 @@ pre {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
 }
+
+.star-hint {
+  margin-top: 20px;
+  font-size: 15px;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 600;
+}
