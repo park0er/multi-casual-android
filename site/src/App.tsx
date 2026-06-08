@@ -93,7 +93,7 @@ const copy: Record<Locale, {
       items: [
         "Community-maintained independent project; not affiliated with or endorsed by Multica maintainers.",
         "Published as its own Android app for Multica users, with explicit attribution and product boundaries.",
-        "Open source under MIT license — inspect, fork, or contribute.",
+        "Open source under GPLv3 license — inspect, fork, or contribute.",
         "No chat content, file content, email address, tokens, or precise location are collected.",
       ],
     },
@@ -153,7 +153,7 @@ const copy: Record<Locale, {
       items: [
         "社区维护的独立项目；与 Multica maintainers 无隶属关系，无背书。",
         "作为面向 Multica 用户的独立 Android app 发布，明确标注产品边界。",
-        "MIT 开源许可证 —— 可以查看、fork 或贡献。",
+        "GPLv3 开源许可证 —— 可以查看、fork 或贡献。",
         "不收集聊天内容、文件内容、邮箱、tokens 或精确位置信息。",
       ],
     },
