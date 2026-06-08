@@ -289,26 +289,29 @@ function TypewriterEffect({ active, text, reduced }: { active: boolean; text: st
 /* ── PhoneMockup (hero) ── */
 function PhoneMockup({ reduced }: { reduced: boolean }) {
   return (
-    <motion.div className="phone-wrap-stacked" {...fade(reduced, 0.1)}>
-      <motion.div
-        className="phone-back"
-        initial={reduced ? {} : { opacity: 0, x: 80, rotate: -14 }}
-        whileInView={{ opacity: 0.68, x: 0, rotate: -9 }}
+    <div className="hero-phone-stack">
+      <motion.img
+        src={inboxImg} alt="Inbox preview"
+        initial={reduced ? {} : { opacity: 0, x: 60, rotate: -14 }}
+        whileInView={{ opacity: 0.72, x: 0, rotate: -8 }}
         viewport={{ once: true }}
         transition={{ duration: 0.85, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] as const }}
-      >
-        <img src={issueDetailImg} alt="Issue detail preview" />
-      </motion.div>
-      <motion.div
-        className="phone-front"
-        initial={reduced ? {} : { opacity: 0, x: 100, rotate: 10 }}
-        whileInView={{ opacity: 1, x: 0, rotate: 5 }}
+      />
+      <motion.img
+        src={issuesListImg} alt="Issues list preview"
+        initial={reduced ? {} : { opacity: 0, x: 80, rotate: 8 }}
+        whileInView={{ opacity: 1, x: 0, rotate: 4 }}
         viewport={{ once: true }}
-        transition={{ duration: 0.85, delay: 0.35, ease: [0.25, 0.1, 0.25, 1] as const }}
-      >
-        <img src={issueSubImg} alt="Issue subtasks preview" />
-      </motion.div>
-    </motion.div>
+        transition={{ duration: 0.85, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] as const }}
+      />
+      <motion.img
+        src={issueDetailImg} alt="Issue detail preview"
+        initial={reduced ? {} : { opacity: 0, x: 60, rotate: 14 }}
+        whileInView={{ opacity: 0.86, x: 0, rotate: 10 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.85, delay: 0.4, ease: [0.25, 0.1, 0.25, 1] as const }}
+      />
+    </div>
   );
 }
 
