@@ -253,7 +253,9 @@ final class IssueCommentThreads {
         ArrayList<Thread> threads = new ArrayList<>();
         for (Models.Comment root : roots) {
             ArrayList<Models.Comment> replies = repliesByRoot.getOrDefault(clean(root.id), new ArrayList<>());
-            replies.sort(IssueCommentThreads::compareCreatedAt);
+            replies.sort((left, right) -> descending
+                    ? compareCreatedAt(right, left)
+                    : compareCreatedAt(left, right));
             threads.add(new Thread(root, replies));
         }
         return threads;
