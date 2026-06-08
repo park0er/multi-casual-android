@@ -19,9 +19,9 @@ import promoVideo from "./assets/video/multica-android-promo-draft.mp4";
 
 const release = {
   packageName: "ai.multicasual.app",
-  sha256: "0b34ab0d164403aec655ca9e829b3fce6a2849f4a83dc1f631336ff725299c42",
+  sha256: "989ff62edc6af48263bf671ad79d64500cfe7a0accd9b5c8d482ca2994e89f7b",
   githubUrl: "https://github.com/park0er/multi-casual-android",
-  releasesUrl: "https://github.com/park0er/multi-casual-android/releases/latest",
+  releasesUrl: "https://github.com/park0er/multi-casual-android/releases/download/v0.1.2/Multi-Casual-Android-v0.1.2.apk",
   multicaUrl: "https://multica.ai",
   apiUrl: "https://api.multica.ai",
 };
@@ -636,7 +636,7 @@ export default function App() {
               <code>{release.sha256}</code>
             </div>
           </div>
-          <pre><code>{`adb install -r Multi-Casual-Android-v0.1.1.apk`}</code></pre>
+          <pre><code>{`adb install -r Multi-Casual-Android-v0.1.2.apk`}</code></pre>
           <div className="cta-row compact">
             <a className="button primary" href={release.releasesUrl}>{t.download.latest}</a>
             <a className="button secondary" href={release.githubUrl}>{t.download.source}</a>
