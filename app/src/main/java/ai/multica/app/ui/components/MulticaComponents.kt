@@ -61,6 +61,7 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1612,6 +1613,7 @@ fun MulticaCupertinoTextField(
     singleLine: Boolean = false,
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    onFocusedChange: ((Boolean) -> Unit)? = null,
 ) {
     val fieldDescription = contentDescription ?: "Multica Cupertino Text Field $label"
     val centerSingleLineContent = singleLine || minLines <= 1
@@ -1651,7 +1653,8 @@ fun MulticaCupertinoTextField(
                 onValueChange = onValueChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .wrapContentHeight(),
+                    .wrapContentHeight()
+                    .onFocusChanged { onFocusedChange?.invoke(it.isFocused) },
                 enabled = enabled,
                 singleLine = singleLine,
                 minLines = minLines,
@@ -1694,6 +1697,7 @@ fun MulticaTextField(
     singleLine: Boolean = false,
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    onFocusedChange: ((Boolean) -> Unit)? = null,
 ) {
     MulticaCupertinoTextField(
         value = value,
@@ -1707,6 +1711,7 @@ fun MulticaTextField(
         singleLine = singleLine,
         minLines = minLines,
         maxLines = maxLines,
+        onFocusedChange = onFocusedChange,
     )
 }
 
