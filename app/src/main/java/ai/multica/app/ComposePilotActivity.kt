@@ -3420,7 +3420,8 @@ private fun PilotChatMessages(
     onArchived: () -> Unit,
 ) {
     var state by remember(session.id) { mutableStateOf<Result<PilotChatMessagesData>?>(null) }
-    var refresh by remember(session.id) { mutableIntStateOf(0) }
+    var messagesRefresh by remember(session.id) { mutableIntStateOf(0) }
+    var pendingRefresh by remember(session.id) { mutableIntStateOf(0) }
     var draft by remember(session.id) { mutableStateOf("") }
     var sending by remember(session.id) { mutableStateOf(false) }
     var locallyPending by remember(session.id) { mutableStateOf(false) }
@@ -3434,15 +3435,18 @@ private fun PilotChatMessages(
     var composerFocused by remember(session.id) { mutableStateOf(false) }
     var actionError by remember(session.id) { mutableStateOf<String?>(null) }
     val configuration = LocalConfiguration.current
-    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(
+        ChatExperiencePolicy.Route.CHAT,
+        configuration.screenHeightDp,
+    ).dp
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val hazeState = rememberHazeState()
     val haptic = LocalHapticFeedback.current
 
-    LaunchedEffect(session.id, refresh) {
-        state = null
-        state = withContext(Dispatchers.IO) {
+    LaunchedEffect(session.id, messagesRefresh) {
+        val previous = state
+        val result = withContext(Dispatchers.IO) {
             runCatching {
                 val messages = api.chatMessages(workspaceId, session.id)
                 val pending = runCatching { api.pendingChatTask(workspaceId, session.id) }
@@ -3454,14 +3458,35 @@ private fun PilotChatMessages(
                 PilotChatMessagesData(messages, pending, agents)
             }
         }
+        if (result.isSuccess || previous == null || previous.isFailure) {
+            state = result
+        } else {
+            actionError = "${if (zh) "消息刷新失败" else "Message refresh failed"}: ${result.exceptionOrNull()?.message ?: result.exceptionOrNull().toString()}"
+        }
     }
 
-    LaunchedEffect(sending, state?.getOrNull()?.pendingTask?.taskId) {
+    LaunchedEffect(session.id, pendingRefresh) {
+        val current = state?.getOrNull() ?: return@LaunchedEffect
+        val previousPendingTaskId = current.pendingTask.taskId
+        val result = withContext(Dispatchers.IO) {
+            runCatching { api.pendingChatTask(workspaceId, session.id) }
+        }
+        result.onSuccess { pending ->
+            state = Result.success(current.copy(pendingTask = pending))
+            if (validChatTaskId(previousPendingTaskId) && !validChatTaskId(pending.taskId)) {
+                messagesRefresh++
+            }
+        }.onFailure {
+            actionError = "${if (zh) "任务状态刷新失败" else "Task status refresh failed"}: ${it.message ?: it.toString()}"
+        }
+    }
+
+    LaunchedEffect(sending, locallyPending, state?.getOrNull()?.pendingTask?.taskId) {
         val taskId = state?.getOrNull()?.pendingTask?.taskId.orEmpty()
-        if (!sending && taskId.isBlank()) return@LaunchedEffect
-        while (sending || taskId.isNotBlank()) {
-            delay(5_000)
-            refresh++
+        if (!sending && !locallyPending && !validChatTaskId(taskId)) return@LaunchedEffect
+        while (sending || locallyPending || validChatTaskId(taskId)) {
+            delay(2_000)
+            pendingRefresh++
         }
     }
 
@@ -3523,7 +3548,10 @@ private fun PilotChatMessages(
                 runCatching { api.cancelTaskById(workspaceId, task.taskId) }
             }
             cancelling = false
-            result.onSuccess { refresh++ }
+            result.onSuccess {
+                pendingRefresh++
+                messagesRefresh++
+            }
                 .onFailure { actionError = "${if (zh) "取消失败" else "Cancel failed"}: ${it.message ?: it.toString()}" }
         }
     }
@@ -3698,7 +3726,7 @@ private fun PilotChatMessages(
             ) {
                 MulticaErrorState(
                     message = "${if (zh) "消息加载失败" else "Messages failed"}\n${loaded.exceptionOrNull()?.message.orEmpty()}",
-                    onRetry = { refresh++ },
+                    onRetry = { messagesRefresh++ },
                 )
             }
             else -> LazyColumn(
@@ -3719,15 +3747,25 @@ private fun PilotChatMessages(
                         )
                     }
                 }
-                items(messages) { message ->
+                items(
+                    items = messages,
+                    key = { message ->
+                        message.id.ifBlank { "${message.role}:${message.createdAt}:${message.content.hashCode()}" }
+                    },
+                ) { message ->
                     ChatMessageBubble(message = message, zh = zh, api = api, workspaceId = workspaceId)
                 }
-                if (sending || locallyPending || validChatTaskId(activePending.taskId)) {
+                val activePendingTaskId = activePending.taskId
+                val pendingAlreadyPersisted = validChatTaskId(activePendingTaskId) &&
+                    messages.any { message ->
+                        !message.role.equals("user", ignoreCase = true) && message.taskId == activePendingTaskId
+                    }
+                if ((sending || locallyPending || validChatTaskId(activePendingTaskId)) && !pendingAlreadyPersisted) {
                     item(key = "chat-latest-progress") {
                         ChatPendingTimelineCard(
                             api = api,
                             workspaceId = workspaceId,
-                            taskId = activePending.taskId,
+                            taskId = activePendingTaskId,
                             status = activePending.status.ifBlank { if (sending || locallyPending) "queued" else "" },
                             zh = zh,
                         )
@@ -3782,8 +3820,8 @@ private fun PilotChatMessages(
                             modifier = Modifier.weight(1f),
                             label = if (zh) "发送 Markdown 消息..." else "Send a Markdown message...",
                             contentDescription = "Chat Message Input",
-                            minLines = if (composerFocused) 12 else 1,
-                            maxLines = if (composerFocused) 18 else 4,
+                            minLines = if (composerFocused) 4 else 1,
+                            maxLines = if (composerFocused) 8 else 4,
                             onFocusedChange = { composerFocused = it },
                         )
                         MulticaIconPillButton(
@@ -3803,7 +3841,8 @@ private fun PilotChatMessages(
                                     sending = false
                                     result.onSuccess {
                                         draft = ""
-                                        refresh++
+                                        pendingRefresh++
+                                        messagesRefresh++
                                     }.onFailure {
                                         locallyPending = false
                                         sendError = "${if (zh) "发送失败" else "Send failed"}: ${it.message ?: it.toString()}"
@@ -3956,21 +3995,6 @@ private fun ChatMessageBubble(
                         onDismissRequest = { moreOpen = false },
                     )
                 }
-                if (!isUser && api != null && !workspaceId.isNullOrBlank() && validChatTaskId(message.taskId)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .semantics { contentDescription = "Chat Assistant Bubble Timeline ${message.taskId}" },
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        ChatTaskWebLiveBanner(
-                            title = if (zh) "Agent 执行过程" else "Agent timeline",
-                            subtitle = Models.shortId(message.taskId),
-                            active = false,
-                        )
-                        ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = message.taskId, zh = zh)
-                    }
-                }
                 if (meta.isNotBlank()) {
                     Text(
                         text = meta,
@@ -4036,32 +4060,10 @@ private fun ChatPendingTimelineCard(
                     active = true,
                 )
                 if (taskId.isNotBlank()) {
-                    ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = taskId, zh = zh)
+                    ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = taskId, zh = zh, active = true)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ChatTaskTimeline(
-    api: ApiClient,
-    workspaceId: String,
-    taskId: String,
-    zh: Boolean,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = "Chat Task Timeline $taskId" },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ChatTaskWebLiveBanner(
-            title = if (zh) "Agent 执行过程" else "Agent timeline",
-            subtitle = Models.shortId(taskId),
-            active = false,
-        )
-        ChatTaskTimelineRows(api = api, workspaceId = workspaceId, taskId = taskId, zh = zh)
     }
 }
 
@@ -4071,10 +4073,16 @@ private fun ChatTaskTimelineRows(
     workspaceId: String,
     taskId: String,
     zh: Boolean,
+    active: Boolean,
 ) {
     var state by remember(taskId, workspaceId) { mutableStateOf<Result<List<Models.TaskMessage>>?>(null) }
-    LaunchedEffect(taskId, workspaceId) {
-        state = withContext(Dispatchers.IO) { runCatching { api.runMessages(taskId, workspaceId) } }
+    LaunchedEffect(taskId, workspaceId, active) {
+        if (taskId.isBlank()) return@LaunchedEffect
+        do {
+            state = withContext(Dispatchers.IO) { runCatching { api.runMessages(taskId, workspaceId) } }
+            if (!active) break
+            delay(1_500)
+        } while (active)
     }
     when (val loaded = state) {
         null -> ChatTaskWebEmptyRow(
@@ -10773,11 +10781,14 @@ private fun IssueCommentReplyBox(
     var mentionQuery by remember(parentId) { mutableStateOf("") }
     var replyFocused by remember(parentId) { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
-    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(
+        ChatExperiencePolicy.Route.ISSUE_REPLY,
+        configuration.screenHeightDp,
+    ).dp
     val focusRequester = remember(parentId) { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-val replyActionModifier = Modifier.size(42.dp)
+    val replyActionModifier = Modifier.size(42.dp)
     val mentionItems = remember(agents, members, squads, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
         val agentItems = agents
@@ -10849,8 +10860,8 @@ val replyActionModifier = Modifier.size(42.dp)
                     .focusRequester(focusRequester)
                     .semantics(mergeDescendants = true) { contentDescription = "Issue Comment Reply Input $parentId" },
                 label = if (zh) "写回复..." else "Write a reply...",
-                minLines = if (replyFocused) 12 else 3,
-                maxLines = if (replyFocused) 18 else 7,
+                minLines = if (replyFocused) 3 else 3,
+                maxLines = if (replyFocused) 6 else 7,
                 onFocusedChange = { replyFocused = it },
             )
             if (pendingAttachments.isNotEmpty()) {
@@ -11156,7 +11167,10 @@ private fun IssueCommentInputBar(
     var mentionQuery by remember { mutableStateOf("") }
     var commentFocused by remember { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
-    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(configuration.screenHeightDp).dp
+    val focusedComposerHeight = ChatExperiencePolicy.focusedComposerHeightPx(
+        ChatExperiencePolicy.Route.ISSUE_COMMENT,
+        configuration.screenHeightDp,
+    ).dp
     val mentionItems = remember(agents, members, squads, mentionQuery) {
         val query = mentionQuery.trim().lowercase()
         val agentItems = agents
@@ -11247,8 +11261,8 @@ private fun IssueCommentInputBar(
                         placeholder = if (zh) "评论" else "Comment",
                         showLabel = false,
                         contentDescription = "Issue Comment Input",
-                        minLines = if (commentFocused) 12 else 1,
-                        maxLines = if (commentFocused) 18 else 4,
+                        minLines = if (commentFocused) 3 else 1,
+                        maxLines = if (commentFocused) 6 else 4,
                         onFocusedChange = { commentFocused = it },
                     )
                     Row(
