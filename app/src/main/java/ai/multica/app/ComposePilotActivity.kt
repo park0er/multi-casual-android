@@ -3472,7 +3472,8 @@ private fun PilotChatMessages(
             runCatching { api.pendingChatTask(workspaceId, session.id) }
         }
         result.onSuccess { pending ->
-            state = Result.success(current.copy(pendingTask = pending))
+            val latest = state?.getOrNull() ?: current
+            state = Result.success(latest.copy(pendingTask = pending))
             if (validChatTaskId(previousPendingTaskId) && !validChatTaskId(pending.taskId)) {
                 messagesRefresh++
             }
