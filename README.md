@@ -158,7 +158,7 @@ Analytics 是 opt-in。App 会先请求用户同意，然后才会上报 analyti
 
 - 中国大陆路线：友盟
 - 全球路线：PostHog
-- App 不会有意上报页面访问、聊天内容、文件内容、邮箱、token 或精确位置。
+- App 只上报打开事件，绝不会上报页面访问、聊天内容、文件内容、邮箱、token 或精确位置等任何其余信息，源码公开可扫描隐私保证
 
 如果本地不配置 analytics key，analytics provider 不会启动。
 
