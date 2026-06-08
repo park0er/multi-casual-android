@@ -20,10 +20,11 @@ html { scroll-behavior: smooth; }
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   background:
-    radial-gradient(circle at 80% 5%, rgba(255, 228, 92, 0.32), transparent 30%),
-    radial-gradient(circle at 15% 25%, rgba(22, 71, 255, 0.14), transparent 28%),
-    var(--paper);
+    radial-gradient(circle at 82% 5%, rgba(255, 228, 92, 0.4), transparent 31%),
+    radial-gradient(circle at 10% 30%, rgba(22, 71, 255, 0.16), transparent 30%),
+    linear-gradient(180deg, #fbfcff 0%, var(--paper) 72%, #eef3ff 100%);
 }
 
 body, button, input { font: inherit; }
@@ -194,12 +195,27 @@ h3 {
   transform-origin: center;
 }
 
-.phone-wrap-stacked {
-  width: min(390px, 82vw);
+.hero-phone-stack {
+  min-height: 720px;
   position: relative;
-  transform-origin: center;
-  min-height: 480px;
+  perspective: 1200px;
 }
+
+.hero-phone-stack img {
+  position: absolute;
+  width: min(310px, 54vw);
+  height: 676px;
+  border-radius: 46px;
+  border: 12px solid #11141d;
+  background: white;
+  object-fit: cover;
+  object-position: top center;
+  box-shadow: var(--shadow);
+}
+
+.hero-phone-stack img:nth-child(1) { left: 2%; top: 48px; transform: rotate(-8deg) translateZ(-20px); }
+.hero-phone-stack img:nth-child(2) { left: 28%; top: 0; transform: rotate(4deg) translateZ(40px); }
+.hero-phone-stack img:nth-child(3) { right: 0; top: 132px; transform: rotate(10deg) translateZ(10px); }
 
 .phone-shell {
   position: relative;
@@ -263,39 +279,7 @@ h3 {
   object-position: top center;
 }
 
-.phone-back, .phone-front {
-  position: absolute;
-  box-shadow: var(--shadow);
-}
 
-.phone-back {
-  width: 200px;
-  padding: 10px;
-  border-radius: 38px;
-  background: #11141d;
-  right: 90px;
-  top: -40px;
-  transform: rotate(-9deg);
-  z-index: 0;
-  opacity: 0.68;
-}
-
-.phone-front {
-  width: 230px;
-  padding: 10px;
-  border-radius: 38px;
-  background: #11141d;
-  right: -10px;
-  top: 10px;
-  transform: rotate(5deg);
-  z-index: 1;
-}
-
-.phone-back img, .phone-front img {
-  width: 100%;
-  display: block;
-  border-radius: 28px;
-}
 
 .tap-ring {
   position: absolute;
@@ -562,6 +546,10 @@ h3 {
   margin-bottom: 48px;
 }
 
+.workspace-phone-wrap .phone-shell-compact {
+  width: min(320px, 72vw);
+}
+
 /* Mention picker overlay */
 .mention-overlay {
   position: absolute;
@@ -816,6 +804,8 @@ pre {
   .topbar { border-radius: 24px; align-items: flex-start; flex-direction: column; }
   .nav-links { flex-wrap: wrap; }
   .hero-grid, .two-col, .demo-grid, .video-copy, .feature-grid, .trust-grid, .release-grid { grid-template-columns: 1fr; }
+  .hero-phone-stack { min-height: 620px; }
+  .hero-phone-stack img { height: 600px; }
   .journey-layout { grid-template-columns: 1fr; }
   .journey-phone-area { position: relative; top: 0; order: -1; }
   .journey-phone-container { justify-content: center; }
