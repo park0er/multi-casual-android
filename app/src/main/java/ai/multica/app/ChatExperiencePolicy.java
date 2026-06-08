@@ -21,6 +21,14 @@ final class ChatExperiencePolicy {
         return "";
     }
 
+    static String firstChatTitle(String content) {
+        String clean = content == null ? "" : content.trim();
+        if (clean.isEmpty()) return "";
+        StringBuilder title = new StringBuilder();
+        clean.codePoints().limit(15).forEach(title::appendCodePoint);
+        return title.toString();
+    }
+
     static boolean requiresTitleBeforeEnteringChat() {
         return false;
     }
