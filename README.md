@@ -9,18 +9,8 @@ This repository publishes an Android app that works with the Multica backend ser
 The app exists for users who already use Multica and want the core workspace workflow on Android: issue browsing, issue details, comments, projects, agents, skills, labels, and settings.
 
 - Multica website: https://multica.ai
+[![release](https://img.shields.io/badge/release-v0.1.2-E4DCC5?style=flat-square&labelColor=2B2A28)](https://github.com/park0er/multi-casual-android/releases/latest) [![cn site](https://img.shields.io/badge/cn%20site-multi--casual--china--8temdtzs.zh--cn.edgeone.cool-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/) [![global site](https://img.shields.io/badge/global%20site-multi--casual--android.pages.dev-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-android.pages.dev/)
 
-<table>
-  <tr>
-    <td><b>release</b></td><td>v0.1.2</td>
-  </tr>
-  <tr>
-    <td><b>cn site</b></td><td><a href="https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/">multi-casual-china-8temdtzs.zh-cn.edgeone.cool</a></td>
-  </tr>
-  <tr>
-    <td><b>global site</b></td><td><a href="https://multi-casual-android.pages.dev/">multi-casual-android.pages.dev</a></td>
-  </tr>
-</table>
 - Multica web app: https://app.multica.ai
 - Service API used by this app: `https://api.multica.ai`
 - Android package: `ai.multicasual.app`
