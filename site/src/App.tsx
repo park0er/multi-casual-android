@@ -1,3 +1,4 @@
+import logoImg from "./assets/logo.png";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, useReducedMotion } from "motion/react";
 import inboxImg from "./assets/screenshots/01-inbox.jpg";
@@ -389,7 +390,7 @@ export default function App() {
         <div className="hero-bg" />
         <motion.nav className="topbar" {...fade(reduced, 0)}>
           <div className="brand">
-            <div className="brand-mark">M</div>
+            <img src={logoImg} alt="Multi-Casual" className="brand-mark" />
             <span>{t.nav.brand}</span>
           </div>
           <div className="nav-links">
