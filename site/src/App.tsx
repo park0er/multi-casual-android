@@ -22,6 +22,7 @@ const release = {
   sha256: "989ff62edc6af48263bf671ad79d64500cfe7a0accd9b5c8d482ca2994e89f7b",
   githubUrl: "https://github.com/park0er/multi-casual-android",
   releasesUrl: "https://github.com/park0er/multi-casual-android/releases/download/v0.1.2/Multi-Casual-Android-v0.1.2.apk",
+  iosUrl: "https://github.com/park0er/multi-casual-ios-app",
   multicaUrl: "https://multica.ai",
   apiUrl: "https://api.multica.ai",
 };
@@ -37,7 +38,7 @@ const copy: Record<Locale, {
   video: { kicker: string; title: string; body: string };
   download: { kicker: string; title: string; package: string; api: string; sha: string; latest: string; source: string; star: string };
   trust: { kicker: string; items: string[] };
-  footer: { tagline: string; multica: string; github: string; download: string };
+  footer: { tagline: string; multica: string; github: string; ios: string; download: string };
 }> = {
   en: {
     nav: { brand: "Multi-Casual Android", download: "Download", trust: "Trust", language: "中文" },
@@ -97,7 +98,7 @@ const copy: Record<Locale, {
         "No chat content, file content, email address, tokens, or precise location are collected.",
       ],
     },
-    footer: { tagline: "Independent Android companion app for Multica users. GitHub-distributed APK.", multica: "Multica website", github: "GitHub", download: "Download APK" },
+    footer: { tagline: "Independent Android companion app for Multica users. GitHub-distributed APK.", multica: "Multica website", github: "GitHub", ios: "iOS App", download: "Download APK" },
   },
   zh: {
     nav: { brand: "Multi-Casual Android", download: "下载", trust: "信任说明", language: "English" },
@@ -157,7 +158,7 @@ const copy: Record<Locale, {
         "不收集聊天内容、文件内容、邮箱、tokens 或精确位置信息。",
       ],
     },
-    footer: { tagline: "面向 Multica 用户的独立 Android companion app。GitHub 分发 APK。", multica: "Multica 官网", github: "GitHub", download: "下载 APK" },
+    footer: { tagline: "面向 Multica 用户的独立 Android companion app。GitHub 分发 APK。", multica: "Multica 官网", github: "GitHub", ios: "iOS App", download: "下载 APK" },
   },
 };
 
@@ -672,7 +673,8 @@ export default function App() {
         <div className="footer-links">
           <a href={release.multicaUrl}>{t.footer.multica}</a>
           <a href={release.githubUrl}>{t.footer.github}</a>
-          <a href={release.releasesUrl}>{t.footer.download}</a>
+          <a href={release.releasesUrl} className="pill pill-android"><span className="android-icon"></span>{t.footer.download}</a>
+          <a href={release.iosUrl} className="pill pill-ios"><span className="apple-icon"></span>{t.footer.ios}</a>
         </div>
       </footer>
     </main>
