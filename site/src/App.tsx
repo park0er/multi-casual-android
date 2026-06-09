@@ -31,7 +31,7 @@ type Locale = "en" | "zh";
 
 const copy: Record<Locale, {
   nav: { brand: string; download: string; trust: string; language: string };
-  hero: { eyebrow: string; title: string; subtitle: string; download: string; github: string; multica: string };
+  hero: { eyebrow: string; title: string; subtitle: string; download: string; github: string; multica: string; ios: string };
   relationship: { kicker: string; title: string; body1: string; body2: string };
   journey: { kicker: string; title: string; subtitle: string; cta: string; steps: Array<{ title: string; subtitle: string }> };
   workspace: { kicker: string; title: string; subtitle: string; items: Array<{ title: string; subtitle: string }> };
@@ -49,6 +49,7 @@ const copy: Record<Locale, {
       download: "Download APK",
       github: "GitHub",
       multica: "Visit Multica",
+      ios: "iOS App",
     },
     relationship: {
       kicker: "Relationship to Multica",
@@ -109,6 +110,7 @@ const copy: Record<Locale, {
       download: "下载 APK",
       github: "GitHub",
       multica: "访问 Multica",
+      ios: "iOS App",
     },
     relationship: {
       kicker: "与 Multica 的关系",
@@ -408,9 +410,10 @@ export default function App() {
             <motion.h1 {...fade(reduced, 0.14)}>{t.hero.title}</motion.h1>
             <motion.p className="hero-subtitle" {...fade(reduced, 0.24)}>{t.hero.subtitle}</motion.p>
             <motion.div className="cta-row" {...fade(reduced, 0.34)}>
-              <motion.a className="button primary" href="#download" whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>{t.hero.download}</motion.a>
+              <motion.a href="#download" className="pill pill-android" whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}><span className="android-icon"></span>{t.hero.download}</motion.a>
               <motion.a className="button secondary" href={release.githubUrl} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{verticalAlign: "middle", marginRight: 6}}><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>{t.hero.github}</motion.a>
               <motion.a className="button ghost" href={release.multicaUrl} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>{t.hero.multica}</motion.a>
+              <motion.a href={release.iosUrl} className="pill pill-ios" whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}><span className="apple-icon"></span>{t.hero.ios}</motion.a>
             </motion.div>
           </div>
           <PhoneMockup reduced={reduced} />
@@ -639,7 +642,7 @@ export default function App() {
           </div>
           <pre><code>{`adb install -r Multi-Casual-Android-v0.1.2.apk`}</code></pre>
           <div className="cta-row compact">
-            <a className="button primary" href={release.releasesUrl}>{t.download.latest}</a>
+            <a href={release.releasesUrl} className="pill pill-android"><span className="android-icon"></span>{t.download.latest}</a>
             <a className="button secondary" href={release.githubUrl}>{t.download.source}</a>
           </div>
           <p className="star-hint">
