@@ -1,24 +1,21 @@
+<div align="center">
+
 # Multi-Casual Android
+
+An independent Android companion app for Multica users.
+
+[![release](https://img.shields.io/badge/release-v0.1.4-E4DCC5?style=flat-square&labelColor=2B2A28)](https://github.com/park0er/multi-casual-android/releases/latest) [![cn site](https://img.shields.io/badge/cn%20site-multi--casual--china--8temdtzs.zh--cn.edgeone.cool-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/) [![global site](https://img.shields.io/badge/global%20site-multi--casual--android.pages.dev-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-android.pages.dev/)
 
 English | [简体中文](#简体中文)
 
-An independent Android companion app for Multica users.
+</div>
+
 
 This repository publishes an Android app that works with the Multica backend service. It is not maintained, endorsed, or published by the Multica project maintainers, and it should not be presented as an Android app from the upstream Multica project.
 
 The app exists for users who already use Multica and want the core workspace workflow on Android: issue browsing, issue details, comments, projects, agents, skills, labels, and settings.
 
 - Multica website: https://multica.ai
-
-<table>
-  <tr>
-    <td><b>cn</b></td><td><a href="https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/">multi-casual-china-8temdtzs.zh-cn.edgeone.cool</a></td>
-  </tr>
-  <tr>
-    <td><b>global</b></td><td><a href="https://multi-casual-android.pages.dev/">multi-casual-android.pages.dev</a></td>
-  </tr>
-</table>
-- Multica web app: https://app.multica.ai
 - Service API used by this app: `https://api.multica.ai`
 - Android package: `ai.multicasual.app`
 
@@ -134,7 +131,6 @@ If you distribute a modified APK or other binary based on this project, keep the
 这个 App 面向已经使用 Multica 的用户，把核心 workspace 工作流带到 Android 上：Issue 浏览、Issue 详情、评论、项目、Agent、Skill、Label 和设置等能力。
 
 - Multica 网站：https://multica.ai
-- Multica Web 应用：https://app.multica.ai
 - 本 App 使用的服务 API：`https://api.multica.ai`
 - Android 包名：`ai.multicasual.app`
 
@@ -161,7 +157,7 @@ Analytics 是 opt-in。App 会先请求用户同意，然后才会上报 analyti
 
 - 中国大陆路线：友盟
 - 全球路线：PostHog
-- App 不会有意上报页面访问、聊天内容、文件内容、邮箱、token 或精确位置。
+- App 只上报打开事件，绝不会上报页面访问、聊天内容、文件内容、邮箱、token 或精确位置等任何其余信息，源码公开可扫描隐私保证
 
 如果本地不配置 analytics key，analytics provider 不会启动。
 
