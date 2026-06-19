@@ -1058,96 +1058,40 @@ fun MulticaCupertinoActionSheet(
             )
         },
         message = {
-            if (!message.isNullOrBlank()) {
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
-                    color = MulticaColors.TextTertiary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        },
-        buttons = {
-            items.forEach { item ->
-                action(
-                    onClick = {
-                        performMulticaTapFeedback(haptic)
-                        item.onClick()
-                        onDismissRequest()
-                    },
-                    style = if (item.destructive) AlertActionStyle.Destructive else AlertActionStyle.Default,
-                    enabled = item.enabled,
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (!message.isNullOrBlank()) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                        color = MulticaColors.TextTertiary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = "Multica Cupertino Action Sheet ${item.contentDescription ?: item.title}"
+                    items(items.size) { index ->
+                        val item = items[index]
+                        MulticaCupertinoActionSheetItemContent(
+                            item = item,
+                            onClick = {
+                                if (!item.enabled) return@MulticaCupertinoActionSheetItemContent
+                                performMulticaTapFeedback(haptic)
+                                item.onClick()
+                                onDismissRequest()
                             },
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        item.icon?.let { icon ->
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = if (item.destructive) MulticaColors.Danger else MulticaColors.TextTertiary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                        if (!item.badgeText.isNullOrBlank()) {
-                            Text(
-                                text = item.badgeText,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(item.badgeColor.copy(alpha = 0.16f))
-                                    .border(1.dp, item.badgeColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                                color = item.badgeColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 15.sp,
-                                    lineHeight = 19.sp,
-                                    fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
-                                ),
-                                color = if (item.destructive) MulticaColors.Danger else MulticaColors.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                            )
-                            if (!item.subtitle.isNullOrBlank()) {
-                                Text(
-                                    text = item.subtitle,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 13.sp),
-                                    color = MulticaColors.TextTertiary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                        }
-                        if (item.selected) {
-                            Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
-                                contentDescription = null,
-                                tint = MulticaColors.Accent,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
+                        )
                     }
                 }
             }
+        },
+        buttons = {
             if (!cancelText.isNullOrBlank()) {
                 action(
                     onClick = {
@@ -1166,6 +1110,83 @@ fun MulticaCupertinoActionSheet(
             }
         },
     )
+}
+
+@Composable
+private fun MulticaCupertinoActionSheetItemContent(
+    item: MulticaCupertinoActionSheetItem,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = item.enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Multica Cupertino Action Sheet ${item.contentDescription ?: item.title}"
+            },
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item.icon?.let { icon ->
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (item.destructive) MulticaColors.Danger else MulticaColors.TextTertiary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        if (!item.badgeText.isNullOrBlank()) {
+            Text(
+                text = item.badgeText,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(item.badgeColor.copy(alpha = 0.16f))
+                    .border(1.dp, item.badgeColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = item.badgeColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                color = if (item.destructive) MulticaColors.Danger else MulticaColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            if (!item.subtitle.isNullOrBlank()) {
+                Text(
+                    text = item.subtitle,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 13.sp),
+                    color = MulticaColors.TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+        if (item.selected) {
+            Icon(
+                imageVector = Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = MulticaColors.Accent,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
 }
 
 @Composable
