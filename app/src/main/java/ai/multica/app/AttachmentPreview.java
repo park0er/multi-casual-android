@@ -39,6 +39,12 @@ final class AttachmentPreview {
         }
     }
 
+    static boolean isWebViewInternalDocumentUrl(String url) {
+        if (url == null) return false;
+        String value = url.trim().toLowerCase(java.util.Locale.ROOT);
+        return value.equals("about:blank") || value.startsWith("data:text/html");
+    }
+
     static String xmlPreviewDocument(String xml) {
         return "<!doctype html><html><head><meta charset=\"utf-8\">"
                 + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"

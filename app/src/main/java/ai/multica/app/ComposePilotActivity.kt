@@ -9572,11 +9572,11 @@ private class AttachmentPreviewWebViewClient(
     }
 
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-        val url = request.url?.toString().orEmpty()
-        return if (AttachmentPreview.isLocalPreviewUrl(url)) null else WebResourceResponse("text/plain", "UTF-8", null)
+        return null
     }
 
     private fun handleNavigation(url: String): Boolean {
+        if (AttachmentPreview.isWebViewInternalDocumentUrl(url)) return false
         if (AttachmentPreview.isLocalPreviewUrl(url)) return false
         openExternalUrl(context, url)
         return true
