@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -9407,31 +9408,71 @@ private fun PilotAttachmentPreview(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MulticaColors.Background)
-            .statusBarsPadding()
-            .semantics { contentDescription = "Attachment Preview Page ${attachment.id}" },
+            .semantics { contentDescription = "Attachment Preview Sheet ${attachment.id}" },
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        PilotPageHeader(
-            title = attachment.filename.ifBlank { if (zh) "附件预览" else "Attachment preview" },
-            leading = {
-                MulticaIconPillButton(
-                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = if (zh) "返回" else "Back",
-                    onClick = onBack,
-                    tone = MulticaButtonTone.Ghost,
-                    modifier = Modifier.size(36.dp),
-                )
-            },
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.32f))
+                .clickable(onClick = onBack),
         )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .statusBarsPadding(),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            color = MulticaColors.Background,
+            tonalElevation = 0.dp,
+            shadowElevation = 12.dp,
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(54.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MulticaColors.Border),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = attachment.filename.ifBlank { if (zh) "附件预览" else "Attachment preview" },
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MulticaColors.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = if (zh) "关闭后会保留当前 Issue 浏览位置" else "Close to keep your place in this issue",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
+                        color = MulticaColors.Muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                MulticaIconPillButton(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = if (zh) "关闭附件预览" else "Close attachment preview",
+                    onClick = onBack,
+                    tone = MulticaButtonTone.Ghost,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
             Text(
                 text = listOf(attachment.contentType, formatBytes(attachment.sizeBytes))
                     .filter { it.isNotBlank() }
@@ -9475,6 +9516,7 @@ private fun PilotAttachmentPreview(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -9738,17 +9780,6 @@ private fun PilotIssueDetail(
         )
         return
     }
-    val activePreviewAttachment = previewAttachment
-    if (activePreviewAttachment != null) {
-        PilotAttachmentPreview(
-            api = api,
-            attachment = activePreviewAttachment,
-            zh = zh,
-            onBack = { previewAttachment = null },
-        )
-        return
-    }
-
     LaunchedEffect(issueId, workspaceId, highlightCommentId, detailRefresh) {
         state = null
         val coreResult = withContext(Dispatchers.IO) {
@@ -11106,6 +11137,14 @@ if (replyingThread != null) {
                     onConfirm = {
                         if (!deletingIssue) deleteCurrentIssue()
                     },
+                )
+            }
+            previewAttachment?.let { attachment ->
+                PilotAttachmentPreview(
+                    api = api,
+                    attachment = attachment,
+                    zh = zh,
+                    onBack = { previewAttachment = null },
                 )
             }
         }
