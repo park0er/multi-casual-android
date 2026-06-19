@@ -2044,6 +2044,7 @@ private fun PilotTabContent(
             workspaceId = session.workspace.id,
             workspace = session.workspace,
             projects = state.projects,
+            currentUser = session.user,
             zh = zh,
             onProjectClick = onProjectClick,
             onRefresh = onRetry,
@@ -12973,6 +12974,7 @@ private fun PilotProjects(
     workspaceId: String,
     workspace: Models.Workspace,
     projects: List<Models.Project>,
+    currentUser: Models.User?,
     zh: Boolean,
     onProjectClick: (Models.Project) -> Unit,
     onRefresh: () -> Unit,
@@ -12995,6 +12997,7 @@ private fun PilotProjects(
     var resourceUrlsText by remember(workspaceId, editingProject?.id, formOpen) { mutableStateOf("") }
     var projectMembers by remember(workspaceId) { mutableStateOf<List<Models.Member>>(emptyList()) }
     var projectAgents by remember(workspaceId) { mutableStateOf<List<Models.Agent>>(emptyList()) }
+    var projectSquads by remember(workspaceId) { mutableStateOf<List<Models.Squad>>(emptyList()) }
     var loadingProjectOptions by remember(workspaceId) { mutableStateOf(false) }
     var saving by remember(workspaceId) { mutableStateOf(false) }
     var pendingDelete by remember(workspaceId) { mutableStateOf<Models.Project?>(null) }
@@ -13094,7 +13097,7 @@ private fun PilotProjects(
     }
 
     LaunchedEffect(formOpen, workspaceId) {
-        if (!formOpen || projectMembers.isNotEmpty() || projectAgents.isNotEmpty() || loadingProjectOptions) return@LaunchedEffect
+        if (!formOpen || projectMembers.isNotEmpty() || projectAgents.isNotEmpty() || projectSquads.isNotEmpty() || loadingProjectOptions) return@LaunchedEffect
         loadingProjectOptions = true
         withContext(Dispatchers.IO) {
             runCatching { api.members(workspaceId) to api.agents(workspaceId) }
@@ -13104,15 +13107,26 @@ private fun PilotProjects(
         }.onFailure {
             resultText = "${if (zh) "项目选项加载失败" else "Project options failed"}: ${it.message ?: it.toString()}"
         }
+        val squads = withContext(Dispatchers.IO) { runCatching { api.squads(workspaceId) }.getOrDefault(emptyList()) }
+        projectSquads = squads
         loadingProjectOptions = false
     }
 
-    val selectedLeadLabel = remember(leadType, leadId, projectMembers, projectAgents, zh) {
-        when (leadType) {
-            "member" -> projectMembers.firstOrNull { it.userId == leadId || it.id == leadId }?.let { member ->
-                member.displayName.ifBlank { member.email }
-            } ?: Models.shortId(leadId)
-            "agent" -> projectAgents.firstOrNull { it.id == leadId }?.name ?: Models.shortId(leadId)
+    val projectLeadOptions = remember(currentUser, projectMembers, projectAgents, projectSquads, zh) {
+        pilotIssueFormAssigneeOptions(
+            if (zh) "无负责人" else "No Lead",
+            currentUser,
+            projectMembers,
+            projectAgents,
+            projectSquads,
+        )
+    }
+
+    val selectedLeadLabel = remember(leadType, leadId, projectLeadOptions, zh) {
+        projectLeadOptions.firstOrNull { option ->
+            option.id == leadId && (option.type == leadType || leadType.isBlank())
+        }?.name ?: when (leadType) {
+            "squad", "agent", "member" -> Models.shortId(leadId)
             else -> if (zh) "无负责人" else "No Lead"
         }
     }
@@ -13262,39 +13276,24 @@ private fun PilotProjects(
                         eyebrow = if (zh) "负责人" else "Lead",
                         title = selectedLeadLabel,
                         subtitle = if (loadingProjectOptions) {
-                            if (zh) "正在加载成员和 Agent" else "Loading members and agents"
+                            if (zh) "正在加载人、Agent 和小队" else "Loading people, agents, and squads"
                         } else {
                             null
                         },
                         contentDescription = "Project Lead Picker",
-                        options = listOf(
+                        options = projectLeadOptions.map { lead ->
                             IssueFormMenuOption(
-                                label = if (zh) "无负责人" else "No Lead",
-                                selected = leadType.isBlank() || leadId.isBlank(),
-                                onClick = {
-                                    leadType = ""
-                                    leadId = ""
+                                label = lead.name,
+                                badgeText = pilotMentionTypeLabel(lead.type, zh),
+                                badgeColor = pilotMentionTypeColor(lead.type),
+                                selected = if (lead.id == null) {
+                                    leadType.isBlank() || leadId.isBlank()
+                                } else {
+                                    leadType == lead.type && leadId == lead.id
                                 },
-                            )
-                        ) + projectMembers.map { member ->
-                            val assigneeId = member.userId.ifBlank { member.id }
-                            IssueFormMenuOption(
-                                label = listOf(member.displayName.ifBlank { member.email }, if (zh) "成员" else "Member")
-                                    .filter { it.isNotBlank() }
-                                    .joinToString(" · "),
-                                selected = leadType == "member" && (leadId == assigneeId || leadId == member.id),
                                 onClick = {
-                                    leadType = "member"
-                                    leadId = assigneeId
-                                },
-                            )
-                        } + projectAgents.map { agent ->
-                            IssueFormMenuOption(
-                                label = listOf(agent.name, "Agent").filter { it.isNotBlank() }.joinToString(" · "),
-                                selected = leadType == "agent" && leadId == agent.id,
-                                onClick = {
-                                    leadType = "agent"
-                                    leadId = agent.id
+                                    leadType = lead.type.orEmpty()
+                                    leadId = lead.id.orEmpty()
                                 },
                             )
                         },
