@@ -810,6 +810,7 @@ public final class MainActivity extends Activity {
                     String statusValue = Models.STATUS_VALUES[Math.max(0, status.getSelectedItemPosition())];
                     String priorityValue = Models.PRIORITY_VALUES[Math.max(0, priority.getSelectedItemPosition())];
                     Models.Assignee selectedAssignee = assigneeAt(assignee.getSelectedItemPosition(), true);
+                    String teamId = selectedAssignee != null && "squad".equals(selectedAssignee.type) ? selectedAssignee.id : null;
                     if (demoMode) {
                         upsertDemoIssue(
                                 editing ? issue.id : "demo-issue-" + (demoIssues.size() + 1),
@@ -828,7 +829,7 @@ public final class MainActivity extends Activity {
                             return api.updateIssue(issue, titleText, desc.getText().toString(), projectId, statusValue, priorityValue, selectedAssignee);
                         }
                         if (currentWorkspace == null) throw new IllegalStateException(t("workspaceRequired"));
-                        return api.createIssue(titleText, desc.getText().toString(), currentWorkspace.id, projectId, statusValue, priorityValue, selectedAssignee);
+                        return api.createIssue(titleText, desc.getText().toString(), currentWorkspace.id, projectId, teamId, statusValue, priorityValue, selectedAssignee, null, null);
                     }, saved -> afterSave.run(), error -> toast(t("saveFailed") + ": " + error.getMessage()));
                 }).show();
     }
@@ -1861,7 +1862,9 @@ public final class MainActivity extends Activity {
     private List<Models.Assignee> assignees(boolean includeEmpty) {
         if (memberCache.isEmpty()) memberCache = safeMembers();
         if (agentCache.isEmpty()) agentCache = safeAgents();
-        return Models.issueAssignees(includeEmpty, t("unassigned"), currentUser, memberCache, agentCache, squadCache);
+        if (squadCache.isEmpty()) squadCache = safeSquads();
+        if (includeEmpty) return Models.issueFormAssigneeOptions(t("unassigned"), currentUser, memberCache, agentCache, squadCache);
+        return Models.issueAssignees(false, t("unassigned"), currentUser, memberCache, agentCache, squadCache);
     }
 
     private String assigneeName(String id, String type) {
