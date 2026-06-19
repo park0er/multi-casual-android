@@ -428,11 +428,44 @@ private data class PilotSkillDetailData(
     val files: List<Models.SkillFile>,
 )
 
-private data class PilotAssigneeOption(
+private data class PilotMentionOption(
     val id: String?,
     val type: String?,
     val name: String,
 )
+
+private fun pilotMentionOptions(
+    includeEmpty: Boolean,
+    emptyLabel: String,
+    currentUser: Models.User?,
+    members: List<Models.Member>,
+    agents: List<Models.Agent>,
+    squads: List<Models.Squad>,
+    query: String = "",
+): List<PilotMentionOption> {
+    val normalizedQuery = query.trim().lowercase()
+    return Models.issueAssignees(includeEmpty, emptyLabel, currentUser, members, agents, squads)
+        .filter { option ->
+            normalizedQuery.isBlank() ||
+                option.name.lowercase().contains(normalizedQuery) ||
+                option.id.orEmpty().lowercase().contains(normalizedQuery)
+        }
+        .map { PilotMentionOption(it.id, it.type, it.name) }
+}
+
+private fun pilotMentionTypeLabel(type: String?, zh: Boolean): String = when (type) {
+    "member" -> if (zh) "人" else "Person"
+    "agent" -> "Agent"
+    "squad" -> if (zh) "小队" else "Squad"
+    else -> if (zh) "无" else "None"
+}
+
+private fun pilotMentionTypeColor(type: String?): Color = when (type) {
+    "member" -> Color(0xFF16A34A)
+    "agent" -> MulticaColors.Accent
+    "squad" -> MulticaColors.Warning
+    else -> MulticaColors.Muted
+}
 
 private val PILOT_REACTION_EMOJIS = listOf("👍", "❤️", "👀", "🎉")
 private const val PILOT_INBOX_PAGE_SIZE = 20
@@ -6773,6 +6806,8 @@ private fun IssueFormMenuRow(
             items = options.map { option ->
                 MulticaCupertinoActionSheetItem(
                     title = option.label,
+                    badgeText = option.badgeText,
+                    badgeColor = option.badgeColor,
                     contentDescription = "$contentDescription ${option.label}",
                     selected = option.selected,
                     onClick = option.onClick,
@@ -6786,6 +6821,8 @@ private fun IssueFormMenuRow(
 
 private data class IssueFormMenuOption(
     val label: String,
+    val badgeText: String? = null,
+    val badgeColor: Color = MulticaColors.Accent,
     val selected: Boolean,
     val onClick: () -> Unit,
 )
@@ -6840,14 +6877,14 @@ private fun PilotIssueForm(
         )
         else -> {
             val options = loaded.getOrThrow()
-            val assignees = Models.issueAssignees(
+            val assignees = pilotMentionOptions(
                 true,
                 if (zh) "未分配" else "Unassigned",
                 session.user,
                 options.members,
                 options.agents,
                 options.squads,
-            ).map { PilotAssigneeOption(it.id, it.type, it.name) }
+            )
             var title by remember(issue?.id) { mutableStateOf(issue?.title.orEmpty()) }
             var description by remember(issue?.id) { mutableStateOf(issue?.description.orEmpty()) }
             var dueDate by remember(issue?.id) { mutableStateOf(issue?.dueDate.orEmpty()) }
@@ -6856,7 +6893,6 @@ private fun PilotIssueForm(
             var projectIndex by remember(issue?.id, options.projects.size) {
                 mutableIntStateOf((options.projects.indexOfFirst { it.id == issue?.projectId } + 1).coerceAtLeast(0))
             }
-            var teamIndex by remember(issue?.id, options.squads.size) { mutableIntStateOf(0) }
             var statusIndex by remember(issue?.id) {
                 mutableIntStateOf(Models.STATUS_VALUES.indexOf(issue?.status ?: "todo").coerceAtLeast(0))
             }
@@ -6944,11 +6980,11 @@ private fun PilotIssueForm(
                     return
                 }
                 val projectId = if (projectIndex == 0) null else options.projects[projectIndex - 1].id
-                val teamId = if (!editing && teamIndex > 0) options.squads[teamIndex - 1].id else null
                 val dueDateText = if (dueDateEnabled) dueDate.trim() else ""
                 val status = Models.STATUS_VALUES[statusIndex]
                 val priority = Models.PRIORITY_VALUES[priorityIndex]
                 val selectedAssignee = assignees[assigneeIndex]
+                val teamId = if (!editing && selectedAssignee.type == "squad") selectedAssignee.id else null
                 val assignee = if (selectedAssignee.id == null) null else {
                     Models.Assignee(selectedAssignee.id, selectedAssignee.type, selectedAssignee.name)
                 }
@@ -7187,31 +7223,6 @@ private fun PilotIssueForm(
                                 )
                             },
                         )
-                        if (!editing) {
-                            IssueFormMenuRow(
-                                eyebrow = if (zh) "小队" else "Squad",
-                                title = if (teamIndex == 0) {
-                                    if (zh) "不选择小队" else "No squad"
-                                } else {
-                                    options.squads[teamIndex - 1].name
-                                },
-                                subtitle = null,
-                                contentDescription = "Issue Form Squad",
-                                options = listOf(
-                                    IssueFormMenuOption(
-                                        label = if (zh) "不选择小队" else "No squad",
-                                        selected = teamIndex == 0,
-                                        onClick = { teamIndex = 0 },
-                                    )
-                                ) + options.squads.mapIndexed { index, squad ->
-                                    IssueFormMenuOption(
-                                        label = squad.name,
-                                        selected = teamIndex == index + 1,
-                                        onClick = { teamIndex = index + 1 },
-                                    )
-                                },
-                            )
-                        }
                         IssueFormMenuRow(
                             eyebrow = if (zh) "负责人" else "Assignee",
                             title = assignees[assigneeIndex].name,
@@ -7220,6 +7231,8 @@ private fun PilotIssueForm(
                             options = assignees.mapIndexed { index, assignee ->
                                 IssueFormMenuOption(
                                     label = assignee.name,
+                                    badgeText = pilotMentionTypeLabel(assignee.type, zh),
+                                    badgeColor = pilotMentionTypeColor(assignee.type),
                                     selected = assigneeIndex == index,
                                     onClick = { assigneeIndex = index },
                                 )
@@ -10860,34 +10873,7 @@ private fun IssueCommentReplyBox(
     val focusManager = LocalFocusManager.current
     val replyActionModifier = Modifier.size(42.dp)
     val mentionItems = remember(agents, members, squads, mentionQuery) {
-        val query = mentionQuery.trim().lowercase()
-        val agentItems = agents
-            .filter { it.archivedAt.isBlank() }
-            .filter { agent ->
-                query.isBlank() ||
-                    agent.name.lowercase().contains(query) ||
-                    agent.description.lowercase().contains(query) ||
-                    agent.id.lowercase().contains(query)
-            }
-            .sortedBy { it.name.lowercase() }
-            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "agent") }
-        val memberItems = members
-            .filter { member ->
-                query.isBlank() ||
-                    member.displayName.lowercase().contains(query) ||
-                    member.email.lowercase().contains(query)
-            }
-            .sortedBy { it.displayName.lowercase() }
-            .map { Triple(it.id, it.displayName, "member") }
-        val squadItems = squads
-            .filter { squad ->
-                query.isBlank() ||
-                    squad.name.lowercase().contains(query) ||
-                    squad.description.lowercase().contains(query)
-            }
-            .sortedBy { it.name.lowercase() }
-            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "squad") }
-        agentItems + memberItems + squadItems
+        pilotMentionOptions(false, "", null, members, agents.filter { it.archivedAt.isBlank() }, squads, mentionQuery)
     }
     LaunchedEffect(parentId) {
         delay(180)
@@ -11029,12 +11015,15 @@ Column(
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            mentionItems.forEach { (id, name, type) ->
+                            mentionItems.forEach { item ->
                                 IssueMentionUnifiedRow(
-                                    name = name,
-                                    mentionType = type,
-                                    contentDescription = "Issue Comment Reply Mention $type Row $id",
+                                    name = item.name,
+                                    mentionType = item.type.orEmpty(),
+                                    zh = zh,
+                                    contentDescription = "Issue Comment Reply Mention ${item.type} Row ${item.id}",
                                     onClick = {
+                                        val name = item.name
+                                        val id = item.id.orEmpty()
                                         val insertion = AgentMentionMarkdown.displayText(name, id)
                                         val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
                                         onDraftChange(draft + separator + insertion + " ")
@@ -11125,6 +11114,7 @@ private fun IssueMentionAgentWebRow(
 private fun IssueMentionUnifiedRow(
     name: String,
     mentionType: String,
+    zh: Boolean,
     contentDescription: String,
     onClick: () -> Unit,
 ) {
@@ -11133,21 +11123,13 @@ private fun IssueMentionUnifiedRow(
         "squad" -> name.take(1).uppercase().ifBlank { "S" }
         else -> name.take(1).uppercase().ifBlank { "A" }
     }
-    val iconColor = when (mentionType) {
-        "member" -> MulticaColors.Text
-        "squad" -> MulticaColors.Accent
-        else -> MulticaColors.Accent
-    }
+    val iconColor = pilotMentionTypeColor(mentionType)
     val iconBg = when (mentionType) {
         "member" -> MulticaColors.AccentSoft.copy(alpha = 0.12f)
         "squad" -> MulticaColors.AccentSoft.copy(alpha = 0.36f)
         else -> MulticaColors.AccentSoft.copy(alpha = 0.24f)
     }
-    val typeLabel = when (mentionType) {
-        "member" -> "member"
-        "squad" -> "squad"
-        else -> "agent"
-    }
+    val typeLabel = pilotMentionTypeLabel(mentionType, zh)
     val mentionMarkdown = when (mentionType) {
         "member" -> AgentMentionMarkdown.memberMarkdown(name, "")
         "squad" -> AgentMentionMarkdown.squadMarkdown(name, "")
@@ -11244,34 +11226,7 @@ private fun IssueCommentInputBar(
         configuration.screenHeightDp,
     ).dp
     val mentionItems = remember(agents, members, squads, mentionQuery) {
-        val query = mentionQuery.trim().lowercase()
-        val agentItems = agents
-            .filter { it.archivedAt.isBlank() }
-            .filter { agent ->
-                query.isBlank() ||
-                    agent.name.lowercase().contains(query) ||
-                    agent.description.lowercase().contains(query) ||
-                    agent.id.lowercase().contains(query)
-            }
-            .sortedBy { it.name.lowercase() }
-            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "agent") }
-        val memberItems = members
-            .filter { member ->
-                query.isBlank() ||
-                    member.displayName.lowercase().contains(query) ||
-                    member.email.lowercase().contains(query)
-            }
-            .sortedBy { it.displayName.lowercase() }
-            .map { Triple(it.id, it.displayName, "member") }
-        val squadItems = squads
-            .filter { squad ->
-                query.isBlank() ||
-                    squad.name.lowercase().contains(query) ||
-                    squad.description.lowercase().contains(query)
-            }
-            .sortedBy { it.name.lowercase() }
-            .map { Triple(it.id, it.name.ifBlank { Models.shortId(it.id) }, "squad") }
-        agentItems + memberItems + squadItems
+        pilotMentionOptions(false, "", null, members, agents.filter { it.archivedAt.isBlank() }, squads, mentionQuery)
     }
     Surface(
         modifier = Modifier
@@ -11437,12 +11392,15 @@ Column(
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            mentionItems.forEach { (id, name, type) ->
+                            mentionItems.forEach { item ->
                                 IssueMentionUnifiedRow(
-                                    name = name,
-                                    mentionType = type,
-                                    contentDescription = "Issue Comment Mention $type Row $id",
+                                    name = item.name,
+                                    mentionType = item.type.orEmpty(),
+                                    zh = zh,
+                                    contentDescription = "Issue Comment Mention ${item.type} Row ${item.id}",
                                     onClick = {
+                                        val name = item.name
+                                        val id = item.id.orEmpty()
                                         val insertion = AgentMentionMarkdown.displayText(name, id)
                                         val separator = if (draft.isBlank() || draft.endsWith(" ") || draft.endsWith("\n")) "" else " "
                                         onDraftChange(draft + separator + insertion + " ")

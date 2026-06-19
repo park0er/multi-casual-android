@@ -1021,6 +1021,8 @@ data class MulticaCupertinoActionSheetItem(
     val title: String,
     val subtitle: String? = null,
     val icon: ImageVector? = null,
+    val badgeText: String? = null,
+    val badgeColor: Color = MulticaColors.Accent,
     val contentDescription: String? = null,
     val selected: Boolean = false,
     val destructive: Boolean = false,
@@ -1091,6 +1093,24 @@ fun MulticaCupertinoActionSheet(
                                 contentDescription = null,
                                 tint = if (item.destructive) MulticaColors.Danger else MulticaColors.TextTertiary,
                                 modifier = Modifier.size(16.dp),
+                            )
+                        }
+                        if (!item.badgeText.isNullOrBlank()) {
+                            Text(
+                                text = item.badgeText,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(item.badgeColor.copy(alpha = 0.16f))
+                                    .border(1.dp, item.badgeColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = item.badgeColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
