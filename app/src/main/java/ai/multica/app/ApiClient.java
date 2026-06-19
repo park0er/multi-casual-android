@@ -751,7 +751,7 @@ final class ApiClient {
     List<Models.Squad> squads(String workspaceId, boolean includeArchived) throws Exception {
         JSONObject query = query(null, "workspace_id", workspaceId);
         if (includeArchived) query.put("include_archived", "true");
-        JSONObject json = requestObject("GET", "/api/squads", query, null);
+        JSONObject json = requestObject("GET", "/api/squads", query, null, workspaceIdHeaders(workspaceId));
         return parseArray(extractArray(json, "squads"), Models.Squad::new);
     }
 
@@ -1550,6 +1550,14 @@ final class ApiClient {
         if (!slug.isEmpty()) {
             return Collections.singletonMap("X-Workspace-Slug", slug);
         }
+        String id = workspaceId == null ? "" : workspaceId.trim();
+        if (!id.isEmpty()) {
+            return Collections.singletonMap("X-Workspace-ID", id);
+        }
+        throw new IllegalArgumentException("workspace_id is required. Select a workspace first.");
+    }
+
+    static Map<String, String> workspaceIdHeaders(String workspaceId) {
         String id = workspaceId == null ? "" : workspaceId.trim();
         if (!id.isEmpty()) {
             return Collections.singletonMap("X-Workspace-ID", id);

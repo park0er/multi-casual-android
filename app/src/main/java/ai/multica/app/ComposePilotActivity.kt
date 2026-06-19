@@ -6862,7 +6862,7 @@ private fun PilotIssueForm(
                     projects = api.projects(session.workspace.id, 500, 0).items,
                     members = api.members(session.workspace.id),
                     agents = api.agents(session.workspace.id),
-                    squads = runCatching { api.squads(session.workspace.id) }.getOrElse { emptyList() },
+                    squads = api.squads(session.workspace.id),
                 )
             }
         }
