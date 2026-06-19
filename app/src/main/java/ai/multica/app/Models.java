@@ -230,6 +230,31 @@ final class Models {
         return list;
     }
 
+    static List<Assignee> issueFormAssigneeOptions(String emptyLabel, User currentUser,
+                                                   List<Member> members, List<Agent> agents, List<Squad> squads) {
+        List<Assignee> list = new ArrayList<>();
+        list.add(new Assignee(null, null, emptyLabel));
+        for (Squad squad : squads) {
+            if (squad.id == null || squad.id.isEmpty()) continue;
+            list.add(new Assignee(squad.id, "squad", squad.name));
+        }
+        for (Agent agent : agents) {
+            if (agent.id == null || agent.id.isEmpty()) continue;
+            list.add(new Assignee(agent.id, "agent", agent.name));
+        }
+        List<String> seenMemberIds = new ArrayList<>();
+        if (currentUser != null && currentUser.id != null && !currentUser.id.isEmpty()) {
+            list.add(new Assignee(currentUser.id, "member", currentUser.name));
+            seenMemberIds.add(currentUser.id);
+        }
+        for (Member member : members) {
+            if (member.id == null || member.id.isEmpty() || seenMemberIds.contains(member.id)) continue;
+            list.add(new Assignee(member.id, "member", member.displayName));
+            seenMemberIds.add(member.id);
+        }
+        return list;
+    }
+
     static final class Page<T> {
         final List<T> items;
         final boolean hasMore;

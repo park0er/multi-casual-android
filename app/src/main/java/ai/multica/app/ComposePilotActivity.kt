@@ -453,6 +453,17 @@ private fun pilotMentionOptions(
         .map { PilotMentionOption(it.id, it.type, it.name) }
 }
 
+private fun pilotIssueFormAssigneeOptions(
+    emptyLabel: String,
+    currentUser: Models.User?,
+    members: List<Models.Member>,
+    agents: List<Models.Agent>,
+    squads: List<Models.Squad>,
+): List<PilotMentionOption> {
+    return Models.issueFormAssigneeOptions(emptyLabel, currentUser, members, agents, squads)
+        .map { PilotMentionOption(it.id, it.type, it.name) }
+}
+
 private fun pilotMentionTypeLabel(type: String?, zh: Boolean): String = when (type) {
     "member" -> if (zh) "人" else "Person"
     "agent" -> "Agent"
@@ -6877,8 +6888,7 @@ private fun PilotIssueForm(
         )
         else -> {
             val options = loaded.getOrThrow()
-            val assignees = pilotMentionOptions(
-                true,
+            val assignees = pilotIssueFormAssigneeOptions(
                 if (zh) "未分配" else "Unassigned",
                 session.user,
                 options.members,
