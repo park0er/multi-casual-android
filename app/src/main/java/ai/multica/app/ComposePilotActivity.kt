@@ -9423,9 +9423,9 @@ private fun PilotAttachmentPreview(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.92f)
+                .fillMaxHeight(0.97f)
                 .statusBarsPadding(),
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
             color = MulticaColors.Background,
             tonalElevation = 0.dp,
             shadowElevation = 12.dp,
@@ -9433,56 +9433,32 @@ private fun PilotAttachmentPreview(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .width(54.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(MulticaColors.Border),
-            )
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        text = attachment.filename.ifBlank { if (zh) "附件预览" else "Attachment preview" },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MulticaColors.Text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (zh) "关闭后会保留当前 Issue 浏览位置" else "Close to keep your place in this issue",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 15.sp),
-                        color = MulticaColors.Muted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Spacer(modifier = Modifier.width(36.dp))
+                Box(
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(MulticaColors.Border),
+                )
                 MulticaIconPillButton(
                     icon = Icons.Outlined.Close,
                     contentDescription = if (zh) "关闭附件预览" else "Close attachment preview",
                     onClick = onBack,
                     tone = MulticaButtonTone.Ghost,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(28.dp),
                 )
             }
-            Text(
-                text = listOf(attachment.contentType, formatBytes(attachment.sizeBytes))
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · ")
-                    .ifBlank { if (zh) "内置预览" else "Built-in preview" },
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, lineHeight = 17.sp),
-                color = MulticaColors.Muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
             when {
                 target.isBlank() -> MulticaErrorState(
                     message = if (zh) "附件没有可预览链接" else "Attachment has no preview URL",
