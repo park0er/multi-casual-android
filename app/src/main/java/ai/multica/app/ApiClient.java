@@ -521,6 +521,31 @@ final class ApiClient {
         return new Models.Attachment(json);
     }
 
+    String downloadAttachmentText(String url) throws Exception {
+        if (url == null || url.trim().isEmpty()) return "";
+        HttpURLConnection conn = (HttpURLConnection) new URL(url.trim()).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
+        conn.setRequestProperty("Accept", "text/markdown,text/html,application/xhtml+xml,application/xml,text/xml,text/*,*/*;q=0.8");
+        conn.setRequestProperty("X-Client-Platform", "android");
+        conn.setRequestProperty("X-Client-Version", "debug");
+        String token = authStore.token();
+        if (token != null && !token.isEmpty() && url.startsWith(BuildConfig.MULTICA_API_BASE_URL)) {
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+        }
+        String cookieHeader = authStore.cloudFrontCookieHeader();
+        if (cookieHeader != null && !cookieHeader.isEmpty() && url.contains("static.multica.ai")) {
+            conn.setRequestProperty("Cookie", cookieHeader);
+        }
+        int code = conn.getResponseCode();
+        saveResponseCookies(conn);
+        InputStream stream = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
+        String text = readTextPreservingLines(stream);
+        if (code < 200 || code >= 300) throw new ApiException(code, text);
+        return text;
+    }
+
     void deleteAttachment(String workspaceId, String attachmentId) throws Exception {
         requestObject("DELETE", "/api/attachments/" + encPath(attachmentId),
                 query(null, "workspace_id", workspaceId), null);
@@ -1502,6 +1527,17 @@ final class ApiClient {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) sb.append(line);
+        }
+        return sb.toString();
+    }
+
+    private static String readTextPreservingLines(InputStream stream) throws Exception {
+        if (stream == null) return "";
+        StringBuilder sb = new StringBuilder();
+        char[] buffer = new char[4096];
+        try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+            int count;
+            while ((count = reader.read(buffer)) != -1) sb.append(buffer, 0, count);
         }
         return sb.toString();
     }

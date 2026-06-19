@@ -1,6 +1,7 @@
 package ai.multica.app
 
 import android.app.Activity
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,6 +13,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
@@ -284,6 +290,22 @@ class ComposePilotActivity : ComponentActivity() {
             setContent {
                 MulticaTheme {
                     PilotFeedbackSettingsPreview(showInlineError = showInlineError)
+                }
+            }
+            return
+        }
+        if (intent.getBooleanExtra("preview_attachment_markdown", false)) {
+            setContent {
+                MulticaTheme {
+                    PilotAttachmentMarkdownPreviewFixture()
+                }
+            }
+            return
+        }
+        if (intent.getBooleanExtra("preview_attachment_html", false)) {
+            setContent {
+                MulticaTheme {
+                    PilotAttachmentHtmlPreviewFixture()
                 }
             }
             return
@@ -9360,6 +9382,266 @@ private fun IssueAttachmentsWebPanel(
     }
 }
 
+@Composable
+private fun PilotAttachmentPreview(
+    api: ApiClient,
+    attachment: Models.Attachment,
+    zh: Boolean,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val kind = remember(attachment.contentType, attachment.filename) {
+        AttachmentPreview.kindFor(attachment.contentType, attachment.filename)
+    }
+    val target = remember(attachment.downloadUrl, attachment.url) {
+        absoluteAttachmentUrl(clean(attachment.downloadUrl).ifBlank { clean(attachment.url) })
+    }
+    var state by remember(attachment.id) { mutableStateOf<Result<String>?>(null) }
+    var refresh by remember(attachment.id) { mutableIntStateOf(0) }
+
+    BackHandler(onBack = onBack)
+    LaunchedEffect(attachment.id, target, refresh) {
+        state = null
+        state = withContext(Dispatchers.IO) {
+            runCatching { api.downloadAttachmentText(target) }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MulticaColors.Background)
+            .statusBarsPadding()
+            .semantics { contentDescription = "Attachment Preview Page ${attachment.id}" },
+    ) {
+        PilotPageHeader(
+            title = attachment.filename.ifBlank { if (zh) "附件预览" else "Attachment preview" },
+            leading = {
+                MulticaIconPillButton(
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = if (zh) "返回" else "Back",
+                    onClick = onBack,
+                    tone = MulticaButtonTone.Ghost,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = listOf(attachment.contentType, formatBytes(attachment.sizeBytes))
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+                    .ifBlank { if (zh) "内置预览" else "Built-in preview" },
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                color = MulticaColors.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            when {
+                target.isBlank() -> MulticaErrorState(
+                    message = if (zh) "附件没有可预览链接" else "Attachment has no preview URL",
+                    onRetry = onBack,
+                    fullScreen = false,
+                )
+                state == null -> Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CupertinoActivityIndicator(modifier = Modifier.size(24.dp))
+                }
+                state?.isFailure == true -> MulticaErrorState(
+                    message = "${if (zh) "附件加载失败" else "Attachment load failed"}\n${state?.exceptionOrNull()?.message.orEmpty()}",
+                    onRetry = { refresh++ },
+                    fullScreen = false,
+                )
+                else -> {
+                    val body = state?.getOrNull().orEmpty()
+                    when (kind) {
+                        AttachmentPreview.Kind.MARKDOWN -> AttachmentMarkdownPreview(body)
+                        AttachmentPreview.Kind.HTML -> AttachmentHtmlPreview(body, context)
+                        AttachmentPreview.Kind.XML -> AttachmentHtmlPreview(AttachmentPreview.xmlPreviewDocument(body), context)
+                        AttachmentPreview.Kind.DOWNLOAD -> MulticaErrorState(
+                            message = if (zh) "该附件类型不支持内置预览" else "This attachment type does not support built-in preview",
+                            onRetry = onBack,
+                            fullScreen = false,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentMarkdownPreview(markdown: String) {
+    SelectionContainer {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            factory = { context ->
+                LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, 0, 0, 24)
+                }
+            },
+            update = { view ->
+                view.removeAllViews()
+                MarkdownRenderer.render(
+                    view.context,
+                    view,
+                    markdown,
+                    MulticaColors.Text.toArgb(),
+                    MulticaColors.Muted.toArgb(),
+                    MulticaColors.Border.toArgb(),
+                )
+            },
+        )
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun ColumnScope.AttachmentHtmlPreview(html: String, context: Context) {
+    AndroidView(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f),
+        factory = { viewContext ->
+            WebView(viewContext).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = false
+                settings.databaseEnabled = false
+                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.allowFileAccessFromFileURLs = false
+                settings.allowUniversalAccessFromFileURLs = false
+                clearCache(true)
+                clearHistory()
+                webViewClient = AttachmentPreviewWebViewClient(context)
+            }
+        },
+        update = { webView ->
+            webView.loadDataWithBaseURL(AttachmentPreview.BASE_URL, html, "text/html", "UTF-8", null)
+        },
+        onRelease = { webView ->
+            webView.stopLoading()
+            webView.clearHistory()
+            webView.clearCache(true)
+            webView.destroy()
+        },
+    )
+}
+
+private class AttachmentPreviewWebViewClient(
+    private val context: Context,
+) : WebViewClient() {
+    @Deprecated("Deprecated in Java")
+    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+        return handleNavigation(url)
+    }
+
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        return handleNavigation(request.url?.toString().orEmpty())
+    }
+
+    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+        val url = request.url?.toString().orEmpty()
+        return if (AttachmentPreview.isLocalPreviewUrl(url)) null else WebResourceResponse("text/plain", "UTF-8", null)
+    }
+
+    private fun handleNavigation(url: String): Boolean {
+        if (AttachmentPreview.isLocalPreviewUrl(url)) return false
+        openExternalUrl(context, url)
+        return true
+    }
+}
+
+@Composable
+private fun PilotAttachmentMarkdownPreviewFixture() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MulticaColors.Background)
+            .statusBarsPadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PilotPageHeader(title = "Markdown Attachment Preview")
+        AttachmentMarkdownPreview(
+            """
+            # Markdown Attachment
+
+            This attachment renders **inside Android** with the existing Markdown renderer.
+
+            | Feature | Status |
+            | --- | --- |
+            | Tables | Ready |
+            | Links | [Multica](https://app.multica.ai) |
+            """.trimIndent(),
+        )
+    }
+}
+
+@Composable
+private fun PilotAttachmentHtmlPreviewFixture() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MulticaColors.Background)
+            .statusBarsPadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PilotPageHeader(title = "HTML Attachment Preview")
+        AttachmentHtmlPreview(
+            """
+            <!doctype html>
+            <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                  body { font: 16px -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; color: #111; }
+                  button { border: 1px solid #d1d5db; border-radius: 999px; padding: 10px 14px; background: white; }
+                  button.active { background: #0A58FF; color: white; }
+                  .panel { display: none; margin-top: 16px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 16px; }
+                  .panel.active { display: block; }
+                </style>
+              </head>
+              <body>
+                <h1>HTML Attachment</h1>
+                <button id="tab-one" class="active" onclick="showTab('one')">Tab One</button>
+                <button id="tab-two" onclick="showTab('two')">Tab Two</button>
+                <a href="#local-anchor" id="anchor-link">Jump to anchor</a>
+                <a href="https://example.com/" id="external-link">External link</a>
+                <section id="one" class="panel active">First tab content</section>
+                <section id="two" class="panel">Second tab content</section>
+                <p id="local-anchor">Local anchor target</p>
+                <script>
+                  function showTab(id) {
+                    document.querySelectorAll('button').forEach(function(button) { button.classList.remove('active'); });
+                    document.querySelectorAll('.panel').forEach(function(panel) { panel.classList.remove('active'); });
+                    document.getElementById('tab-' + id).classList.add('active');
+                    document.getElementById(id).classList.add('active');
+                  }
+                </script>
+              </body>
+            </html>
+            """.trimIndent(),
+            LocalContext.current,
+        )
+    }
+}
+
 private fun shouldCollapseIssueComment(content: String): Boolean {
     if (content.contains("```")) return false
     if (content.lines().any { it.trim().startsWith("|") && it.trim().endsWith("|") }) return false
@@ -9419,6 +9701,7 @@ private fun PilotIssueDetail(
     var uploadingAttachment by remember(issueId) { mutableStateOf(false) }
     var deletingAttachmentId by remember(issueId) { mutableStateOf<String?>(null) }
     var attachmentMessage by remember(issueId) { mutableStateOf<String?>(null) }
+    var previewAttachment by remember(issueId) { mutableStateOf<Models.Attachment?>(null) }
     var confirmingDeleteIssue by remember(issueId) { mutableStateOf(false) }
     var deletingIssue by remember(issueId) { mutableStateOf(false) }
     var issueMutationMessage by remember(issueId) { mutableStateOf<String?>(null) }
@@ -9452,6 +9735,16 @@ private fun PilotIssueDetail(
             run = activeRun,
             zh = zh,
             onBack = { selectedRun = null },
+        )
+        return
+    }
+    val activePreviewAttachment = previewAttachment
+    if (activePreviewAttachment != null) {
+        PilotAttachmentPreview(
+            api = api,
+            attachment = activePreviewAttachment,
+            zh = zh,
+            onBack = { previewAttachment = null },
         )
         return
     }
@@ -9701,9 +9994,13 @@ private fun PilotIssueDetail(
             }
 
             fun openAttachment(attachment: Models.Attachment) {
-                val target = clean(attachment.downloadUrl).ifBlank { clean(attachment.url) }
+                val target = absoluteAttachmentUrl(clean(attachment.downloadUrl).ifBlank { clean(attachment.url) })
                 if (target.isBlank()) {
                     attachmentMessage = if (zh) "附件没有可打开的链接" else "Attachment has no openable URL"
+                    return
+                }
+                if (AttachmentPreview.kindFor(attachment.contentType, attachment.filename) != AttachmentPreview.Kind.DOWNLOAD) {
+                    previewAttachment = attachment
                     return
                 }
                 val result = runCatching {
@@ -12044,6 +12341,15 @@ private fun MulticaMarkdownImage(
 }
 
 private fun absoluteMarkdownImageUrl(url: String): String {
+    val value = clean(url)
+    return if (value.startsWith("/")) {
+        BuildConfig.MULTICA_API_BASE_URL.trimEnd('/') + value
+    } else {
+        value
+    }
+}
+
+private fun absoluteAttachmentUrl(url: String): String {
     val value = clean(url)
     return if (value.startsWith("/")) {
         BuildConfig.MULTICA_API_BASE_URL.trimEnd('/') + value
