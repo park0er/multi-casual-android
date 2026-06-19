@@ -6856,6 +6856,7 @@ private fun PilotIssueForm(
             var projectIndex by remember(issue?.id, options.projects.size) {
                 mutableIntStateOf((options.projects.indexOfFirst { it.id == issue?.projectId } + 1).coerceAtLeast(0))
             }
+            var teamIndex by remember(issue?.id, options.squads.size) { mutableIntStateOf(0) }
             var statusIndex by remember(issue?.id) {
                 mutableIntStateOf(Models.STATUS_VALUES.indexOf(issue?.status ?: "todo").coerceAtLeast(0))
             }
@@ -6943,6 +6944,7 @@ private fun PilotIssueForm(
                     return
                 }
                 val projectId = if (projectIndex == 0) null else options.projects[projectIndex - 1].id
+                val teamId = if (!editing && teamIndex > 0) options.squads[teamIndex - 1].id else null
                 val dueDateText = if (dueDateEnabled) dueDate.trim() else ""
                 val status = Models.STATUS_VALUES[statusIndex]
                 val priority = Models.PRIORITY_VALUES[priorityIndex]
@@ -6956,7 +6958,7 @@ private fun PilotIssueForm(
                     val result = withContext(Dispatchers.IO) {
                         runCatching {
                             val saved = if (issue == null) {
-                                api.createIssue(titleText, description, session.workspace.id, projectId, status, priority, assignee, dueDateText, parentIssueId)
+                                api.createIssue(titleText, description, session.workspace.id, projectId, teamId, status, priority, assignee, dueDateText, parentIssueId)
                             } else {
                                 api.updateIssue(issue, titleText, description, projectId, status, priority, assignee, dueDateText)
                             }
@@ -7185,6 +7187,31 @@ private fun PilotIssueForm(
                                 )
                             },
                         )
+                        if (!editing) {
+                            IssueFormMenuRow(
+                                eyebrow = if (zh) "小队" else "Squad",
+                                title = if (teamIndex == 0) {
+                                    if (zh) "不选择小队" else "No squad"
+                                } else {
+                                    options.squads[teamIndex - 1].name
+                                },
+                                subtitle = null,
+                                contentDescription = "Issue Form Squad",
+                                options = listOf(
+                                    IssueFormMenuOption(
+                                        label = if (zh) "不选择小队" else "No squad",
+                                        selected = teamIndex == 0,
+                                        onClick = { teamIndex = 0 },
+                                    )
+                                ) + options.squads.mapIndexed { index, squad ->
+                                    IssueFormMenuOption(
+                                        label = squad.name,
+                                        selected = teamIndex == index + 1,
+                                        onClick = { teamIndex = index + 1 },
+                                    )
+                                },
+                            )
+                        }
                         IssueFormMenuRow(
                             eyebrow = if (zh) "负责人" else "Assignee",
                             title = assignees[assigneeIndex].name,
