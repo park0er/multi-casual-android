@@ -4,7 +4,7 @@
 
 An independent Android companion app for Multica users.
 
-[![release](https://img.shields.io/badge/release-v0.1.4-E4DCC5?style=flat-square&labelColor=2B2A28)](https://github.com/park0er/multi-casual-android/releases/latest) [![cn site](https://img.shields.io/badge/cn%20site-multi--casual--china--8temdtzs.zh--cn.edgeone.cool-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/) [![global site](https://img.shields.io/badge/global%20site-multi--casual--android.pages.dev-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-android.pages.dev/)
+[![release](https://img.shields.io/badge/release-v0.1.5-E4DCC5?style=flat-square&labelColor=2B2A28)](https://github.com/park0er/multi-casual-android/releases/latest) [![cn site](https://img.shields.io/badge/cn%20site-multi--casual--china--8temdtzs.zh--cn.edgeone.cool-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-china-8temdtzs.zh-cn.edgeone.cool/) [![global site](https://img.shields.io/badge/global%20site-multi--casual--android.pages.dev-E4DCC5?style=flat-square&labelColor=2B2A28)](https://multi-casual-android.pages.dev/)
 
 English | [简体中文](#简体中文)
 
@@ -51,8 +51,8 @@ You can also build the app without analytics keys. In that case, analytics provi
 For normal installation, download the signed release APK from GitHub Releases:
 
 - Latest release: https://github.com/park0er/multi-casual-android/releases/latest
-- Current signed APK: `Multi-Casual-Android-v0.1.4.apk`
-- SHA256: `35705dcc46fdc5fd9d0d718f50844f94bd55e49e236e4ca8c8b7b2e4f89b6c2f`
+- Current signed APK: `Multi-Casual-Android-v0.1.5.apk`
+- SHA256: `3f50276216d866c0e405e1e99f38f2f2c1c3d5b4a4e79dc092495c7c6a3ebe49`
 
 The debug APK produced by local development commands is not intended for public distribution.
 
@@ -166,8 +166,8 @@ Analytics 是 opt-in。App 会先请求用户同意，然后才会上报 analyti
 普通用户安装时，请从 GitHub Releases 下载签名 release APK：
 
 - 最新 release：https://github.com/park0er/multi-casual-android/releases/latest
-- 当前签名 APK：`Multi-Casual-Android-v0.1.4.apk`
-- SHA256：`35705dcc46fdc5fd9d0d718f50844f94bd55e49e236e4ca8c8b7b2e4f89b6c2f`
+- 当前签名 APK：`Multi-Casual-Android-v0.1.5.apk`
+- SHA256：`3f50276216d866c0e405e1e99f38f2f2c1c3d5b4a4e79dc092495c7c6a3ebe49`
 
 本地开发命令生成的 debug APK 不用于公开分发。
 
