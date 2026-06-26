@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'site-internal/**'
       - '.github/workflows/deploy-site.yml'
   workflow_dispatch:
 
@@ -26,8 +27,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: site/package-lock.json
+          cache-dependency-path: |
+            site/package-lock.json
+            site-internal/package-lock.json
       - run: cd site && npm install && VITE_BASE=/multi-casual-android/ npm run build
+      - run: cd site-internal && npm install && VITE_BASE=/multi-casual-android/xiaomi/ npm run build
+      - run: mkdir -p site/dist/xiaomi && cp -R site-internal/dist/. site/dist/xiaomi/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist

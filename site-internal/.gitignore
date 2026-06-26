@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.edgeone/
+*.tsbuildinfo
+public/downloads/*.apk
